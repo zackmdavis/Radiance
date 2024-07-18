@@ -120,7 +120,7 @@ trait Operation {
         &self,
         _out_gradient: ArrayD<f32>,
         _args: Vec<Rc<Tensor>>,
-        _arg_number: usize,
+        _arg_index: usize,
     ) -> ArrayD<f32>;
 }
 
@@ -138,11 +138,12 @@ impl Operation for Addition {
     }
     fn backward(
         &self,
-        _out_gradient: ArrayD<f32>,
+        out_gradient: ArrayD<f32>,
         _args: Vec<Rc<Tensor>>,
-        _arg_number: usize,
+        _arg_index: usize,
     ) -> ArrayD<f32> {
-        array![1.].into_dyn() // TODO
+        // Addition just passes the gradient through to both branches.
+        out_gradient
     }
 }
 
@@ -159,11 +160,17 @@ impl Operation for Multiplication {
     }
     fn backward(
         &self,
-        _out_gradient: ArrayD<f32>,
-        _args: Vec<Rc<Tensor>>,
-        _arg_number: usize,
+        out_gradient: ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        arg_index: usize,
     ) -> ArrayD<f32> {
-        array![1.].into_dyn() // TODO
+        let other_arg_index = match arg_index {
+            0 => 1,
+            1 => 0,
+            _ => panic!("binary operation expected")
+        };
+        // d/dx(xy) = y
+        out_gradient * args[other_arg_index].array.clone() // dubious perf &c.
     }
 }
 
@@ -187,6 +194,11 @@ fn sorted_computation_graph(end: Rc<Tensor>) -> Vec<Rc<Tensor>> {
     sorted
 }
 
+#[allow(dead_code)]
+fn backprop(_culmination: Rc<Tensor>) {
+    // TODO
+}
+
 
 #[test]
 fn test_addition_forward() {
@@ -205,10 +217,26 @@ fn test_multiplication_forward() {
 }
 
 #[test]
-fn test_addition_backward() {}
+fn test_addition_backward() {
+    let a = TensorBuilder::new(array![1.].into_dyn()).build();
+    let b = TensorBuilder::new(array![2.].into_dyn()).build();
+    let args = vec![Rc::new(a), Rc::new(b)];
+    let out_gradient = array![1.].into_dyn();
+    assert_eq!(Addition{}.backward(out_gradient.clone(), args.clone(), 0), out_gradient);
+    assert_eq!(Addition{}.backward(out_gradient.clone(), args.clone(), 1), out_gradient);
+}
 
 #[test]
-fn test_multiplication_backward() {}
+fn test_multiplication_backward() {
+    let a = TensorBuilder::new(array![2.].into_dyn()).build();
+    let b = TensorBuilder::new(array![3.].into_dyn()).build();
+    let args = vec![Rc::new(a), Rc::new(b)];
+    let out_gradient = array![1.].into_dyn();
+    assert_eq!(Multiplication{}.backward(out_gradient.clone(), args.clone(), 0), array![3.].into_dyn());
+    assert_eq!(Multiplication{}.backward(out_gradient.clone(), args.clone(), 1), array![2.].into_dyn());
+}
 
 #[test]
-fn test_backprop() {}
+fn test_backprop() {
+    // TODO
+}
