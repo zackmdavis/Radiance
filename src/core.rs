@@ -1,10 +1,13 @@
 use std::cell::RefCell;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 use ndarray::prelude::*;
+
+use topological_sort::TopologicalSort;
 
 lazy_static! {
     static ref COUNTER: Mutex<u64> = Mutex::new(0);
@@ -35,6 +38,20 @@ impl fmt::Debug for Tensor {
             .finish()
     }
 }
+
+impl Hash for Tensor {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.identifier.hash(state);
+    }
+}
+
+impl PartialEq for Tensor {
+    fn eq(&self, other: &Self) -> bool {
+        self.identifier == other.identifier
+    }
+}
+
+impl Eq for Tensor {}
 
 struct TensorBuilder {
     array: ArrayD<f32>,
@@ -150,6 +167,27 @@ impl Operation for Multiplication {
     }
 }
 
+
+fn register_parents(sorter: &mut TopologicalSort<Rc<Tensor>>, child: Rc<Tensor>) {
+    if let Some(origin) = &child.origin {
+        for parent in &origin.parents {
+            sorter.add_dependency(parent.clone(), child.clone());
+            register_parents(sorter, parent.clone());
+        }
+    }
+}
+
+#[allow(dead_code)]
+fn sorted_computation_graph(end: Rc<Tensor>) -> Vec<Rc<Tensor>> {
+    let mut sorter = TopologicalSort::new();
+    register_parents(&mut sorter, end);
+    let mut sorted = sorter.collect::<Vec<_>>();
+    // We actually want reverse-topological order
+    sorted.reverse();
+    sorted
+}
+
+
 #[test]
 fn test_addition_forward() {
     let a = TensorBuilder::new(array![1.].into_dyn()).build();
@@ -165,3 +203,12 @@ fn test_multiplication_forward() {
     let c = Multiplication {}.forward(vec![Rc::new(a), Rc::new(b)]);
     assert_eq!(c.array, array![6.].into_dyn());
 }
+
+#[test]
+fn test_addition_backward() {}
+
+#[test]
+fn test_multiplication_backward() {}
+
+#[test]
+fn test_backprop() {}
