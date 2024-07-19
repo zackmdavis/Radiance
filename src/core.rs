@@ -459,3 +459,40 @@ fn test_matrix_multiplication() {
         array![[4., 4.], [6., 6.]].into_dyn()
     );
 }
+
+#[test]
+fn test_matrix_multiplication_non_square() {
+    // Test mostly written by Claude 3.5 Sonnet (expectations revised against PyTorch)
+    let a = Rc::new(
+        TensorBuilder::new(array![[1., 2., 3.], [4., 5., 6.]].into_dyn())
+            .identifier("a".to_string())
+            .requires_gradient(true)
+            .build(),
+    );
+    let b = Rc::new(
+        TensorBuilder::new(array![[7., 8.], [9., 10.], [11., 12.]].into_dyn())
+            .identifier("b".to_string())
+            .requires_gradient(true)
+            .build(),
+    );
+
+    // Perform forward pass
+    let matmul = MatrixMultiplication {};
+    let result = matmul.forward(vec![a.clone(), b.clone()]);
+
+    // Check forward pass result
+    assert_eq!(result.array, array![[58., 64.], [139., 154.]].into_dyn());
+
+    // Test full backpropagation
+    backprop(result);
+
+    // Check gradients after backpropagation
+    assert_eq!(
+        *a.gradient.borrow().as_ref().unwrap(),
+        array![[15., 19., 23.], [15., 19., 23.]].into_dyn()
+    );
+    assert_eq!(
+        *b.gradient.borrow().as_ref().unwrap(),
+        array![[5., 5.], [7., 7.], [9., 9.]].into_dyn()
+    );
+}
