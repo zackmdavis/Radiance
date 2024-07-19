@@ -117,6 +117,7 @@ struct Addition {}
 
 impl Operation for Addition {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 2, "binary operation expected");
         // clone has dubious performance implications?
         let array = inputs[0].array.clone() + inputs[1].array.clone();
         let origin = Origin {
@@ -140,6 +141,7 @@ struct Multiplication {}
 
 impl Operation for Multiplication {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 2, "binary operation expected");
         let array = inputs[0].array.clone() * inputs[1].array.clone(); // dubious performance &c.
         let origin = Origin {
             operation: Box::new(Multiplication {}),
@@ -167,6 +169,7 @@ struct MatrixMultiplication {}
 
 impl Operation for MatrixMultiplication {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 2, "binary operation expected");
         let a = inputs[0]
             .array
             .clone()
@@ -191,17 +194,12 @@ impl Operation for MatrixMultiplication {
         args: Vec<Rc<Tensor>>,
         arg_index: usize,
     ) -> ArrayD<f32> {
-        println!("out_gradient {:?}", out_gradient);
-        println!("out_gradient shape: {:?}", out_gradient.shape());
-
         let out_gradient = out_gradient
             .clone()
             .into_dimensionality::<Ix2>()
             .expect("out gradient is two-dimensional");
         // matrix multiplication is not commutative; separate cases for
         // out_gradient @ B^T and A^T @ out_gradient
-        println!("args[0] shape: {:?}", args[0].array.shape());
-        println!("args[1] shape: {:?}", args[1].array.shape());
         match arg_index {
             0 => {
                 let other = args[1]
