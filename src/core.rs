@@ -226,6 +226,31 @@ impl Operation for MatrixMultiplication {
     }
 }
 
+struct RectifiedLinearUnit {}
+
+impl Operation for RectifiedLinearUnit {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 1, "unary operation expected");
+        let array = inputs[0].array.map(|&x| if x > 0. { x } else { 0. });
+        let origin = Origin {
+            operation: Box::new(RectifiedLinearUnit {}),
+            parents: vec![inputs[0].clone()],
+        };
+        Rc::new(TensorBuilder::new(array).origin(origin).build())
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        let mut gradient = Array::zeros(args[0].array.shape()).into_dyn();
+        azip!((g in &mut gradient, o in out_gradient, a in &args[0].array) if a > &0. { *g += o });
+        gradient
+    }
+}
+
 fn register_parents(sorter: &mut TopologicalSort<Rc<Tensor>>, child: Rc<Tensor>) {
     if let Some(origin) = &child.origin {
         for parent in &origin.parents {
@@ -495,4 +520,42 @@ fn test_matrix_multiplication_non_square() {
         *b.gradient.borrow().as_ref().unwrap(),
         array![[5., 5.], [7., 7.], [9., 9.]].into_dyn()
     );
+}
+
+#[test]
+fn test_rectified_linear_unit() {
+    // Test written by Claude 3.5 Sonnet
+    let input = Rc::new(
+        TensorBuilder::new(array![-2.0, -1.0, 0.0, 1.0, 2.0].into_dyn())
+            .identifier("input".to_string())
+            .requires_gradient(true)
+            .build(),
+    );
+
+    // Perform forward pass
+    let relu = RectifiedLinearUnit {};
+    let result = relu.forward(vec![input.clone()]);
+
+    // Check forward pass result
+    assert_eq!(result.array, array![0.0, 0.0, 0.0, 1.0, 2.0].into_dyn());
+
+    // Test full backpropagation
+    backprop(result);
+
+    // Check gradients after backpropagation
+    assert_eq!(
+        *input.gradient.borrow().as_ref().unwrap(),
+        array![0.0, 0.0, 0.0, 1.0, 1.0].into_dyn()
+    );
+
+    // Additional test with different input
+    let input2 = Rc::new(
+        TensorBuilder::new(array![-1.0, 0.0, 1.0, 2.0, 3.0].into_dyn())
+            .identifier("input2".to_string())
+            .requires_gradient(true)
+            .build(),
+    );
+
+    let result2 = relu.forward(vec![input2.clone()]);
+    assert_eq!(result2.array, array![0.0, 0.0, 1.0, 2.0, 3.0].into_dyn());
 }
