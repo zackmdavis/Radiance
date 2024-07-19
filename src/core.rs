@@ -163,6 +163,69 @@ impl Operation for Multiplication {
     }
 }
 
+struct MatrixMultiplication {}
+
+impl Operation for MatrixMultiplication {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        let a = inputs[0]
+            .array
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let b = inputs[1]
+            .array
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let array = a.dot(&b).into_dyn();
+        let origin = Origin {
+            operation: Box::new(MatrixMultiplication {}),
+            parents: vec![inputs[0].clone(), inputs[1].clone()],
+        };
+        Rc::new(TensorBuilder::new(array).origin(origin).build())
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        arg_index: usize,
+    ) -> ArrayD<f32> {
+        println!("out_gradient {:?}", out_gradient);
+        println!("out_gradient shape: {:?}", out_gradient.shape());
+
+        let out_gradient = out_gradient
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("out gradient is two-dimensional");
+        // matrix multiplication is not commutative; separate cases for
+        // out_gradient @ B^T and A^T @ out_gradient
+        println!("args[0] shape: {:?}", args[0].array.shape());
+        println!("args[1] shape: {:?}", args[1].array.shape());
+        match arg_index {
+            0 => {
+                let other = args[1]
+                    .array
+                    .clone()
+                    .into_dimensionality::<Ix2>()
+                    .expect("arg1 is two-dimensional");
+                let other_transpose = other.t();
+                out_gradient.dot(&other_transpose).into_dyn()
+            }
+            1 => {
+                let other = args[0]
+                    .array
+                    .clone()
+                    .into_dimensionality::<Ix2>()
+                    .expect("arg0 is two-dimensional");
+                let other_transpose = other.t();
+                other_transpose.dot(&out_gradient).into_dyn()
+            }
+            _ => panic!("binary operation expected"),
+        }
+    }
+}
+
 fn register_parents(sorter: &mut TopologicalSort<Rc<Tensor>>, child: Rc<Tensor>) {
     if let Some(origin) = &child.origin {
         for parent in &origin.parents {
@@ -183,7 +246,10 @@ fn sorted_computation_graph(end: Rc<Tensor>) -> Vec<Rc<Tensor>> {
 
 fn backprop(culmination: Rc<Tensor>) {
     let mut gradients = HashMap::<String, ArrayD<f32>>::new();
-    gradients.insert(culmination.identifier.clone(), array![1.].into_dyn());
+    gradients.insert(
+        culmination.identifier.clone(),
+        Array::ones(culmination.array.shape()).into_dyn(),
+    );
     for node in sorted_computation_graph(culmination) {
         let gradient = gradients
             .remove(&node.identifier)
@@ -344,5 +410,52 @@ fn test_backprop_with_reuse() {
     assert_eq!(
         *b.gradient.borrow().as_ref().unwrap(),
         array![3.0].into_dyn()
+    );
+}
+
+#[test]
+fn test_matrix_multiplication() {
+    // Test written by Claude 3.5 Sonnet
+    let a = Rc::new(
+        TensorBuilder::new(array![[1., 2.], [3., 4.]].into_dyn())
+            .identifier("a".to_string())
+            .requires_gradient(true)
+            .build(),
+    );
+    let b = Rc::new(
+        TensorBuilder::new(array![[5., 6.], [7., 8.]].into_dyn())
+            .identifier("b".to_string())
+            .requires_gradient(true)
+            .build(),
+    );
+
+    // Perform forward pass
+    let matmul = MatrixMultiplication {};
+    let result = matmul.forward(vec![a.clone(), b.clone()]);
+
+    // Check forward pass result
+    assert_eq!(result.array, array![[19., 22.], [43., 50.]].into_dyn());
+
+    // Perform backward pass
+    let out_gradient = array![[1., 1.], [1., 1.]].into_dyn();
+
+    let grad_a = matmul.backward(&out_gradient, vec![a.clone(), b.clone()], 0);
+    let grad_b = matmul.backward(&out_gradient, vec![a.clone(), b.clone()], 1);
+
+    // Check backward pass results
+    assert_eq!(grad_a, array![[11., 15.], [11., 15.]].into_dyn());
+    assert_eq!(grad_b, array![[4., 4.], [6., 6.]].into_dyn());
+
+    // Test full backpropagation
+    backprop(result);
+
+    // Check gradients after backpropagation
+    assert_eq!(
+        *a.gradient.borrow().as_ref().unwrap(),
+        array![[11., 15.], [11., 15.]].into_dyn()
+    );
+    assert_eq!(
+        *b.gradient.borrow().as_ref().unwrap(),
+        array![[4., 4.], [6., 6.]].into_dyn()
     );
 }
