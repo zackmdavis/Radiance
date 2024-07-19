@@ -9,5 +9,6 @@ edition = "2021"
 approx = "*"
 lazy_static = "*"
 ndarray = {version = "*", features = ["approx"]}
+ndarray-rand = "0.14.0"
 num-traits = "*"
 topological-sort = "*"

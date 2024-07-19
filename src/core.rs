@@ -7,6 +7,8 @@ use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 use ndarray::prelude::*;
+use ndarray_rand::rand_distr::Uniform;
+use ndarray_rand::RandomExt;
 
 use topological_sort::TopologicalSort;
 
@@ -302,6 +304,79 @@ fn backprop(culmination: Rc<Tensor>) {
                 }
             }
         }
+    }
+}
+
+struct Linear {
+    identifier: String,
+    weights: Rc<Tensor>,
+    biases: Rc<Tensor>,
+}
+
+impl Linear {
+    fn new(identifier: &str, in_dimensionality: usize, out_dimensionality: usize) -> Linear {
+        let k = 1. / (in_dimensionality as f32);
+        Linear {
+            identifier: identifier.to_owned(),
+            weights: Rc::new(
+                TensorBuilder::new(
+                    Array::random(
+                        (out_dimensionality, in_dimensionality),
+                        Uniform::new(-k.sqrt(), k.sqrt()),
+                    )
+                    .into_dyn(),
+                )
+                .requires_gradient(true)
+                .identifier(format!("{}_weights", identifier))
+                .build(),
+            ),
+            biases: Rc::new(
+                TensorBuilder::new(
+                    Array::random((out_dimensionality,), Uniform::new(-k.sqrt(), k.sqrt()))
+                        .into_dyn(),
+                )
+                .requires_gradient(true)
+                .identifier(format!("{}_biases", identifier))
+                .build(),
+            ),
+        }
+    }
+
+    fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
+        let product = MatrixMultiplication {}.forward(vec![self.weights.clone(), input]);
+        Addition {}.forward(vec![product, self.biases.clone()])
+    }
+}
+
+struct MyLittlePerceptron {
+    layers: Vec<Linear>,
+}
+
+impl MyLittlePerceptron {
+    fn new(layer_dimensionalities: Vec<usize>) -> Self {
+        let mut layers = Vec::new();
+        for (i, window) in layer_dimensionalities.windows(2).enumerate() {
+            let &[in_dimensionality, out_dimensionality] = window else {
+                panic!("impossible")
+            };
+            layers.push(Linear::new(
+                &format!("Layer{}", i),
+                in_dimensionality,
+                out_dimensionality,
+            ));
+        }
+        Self { layers }
+    }
+
+    fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
+        let mut x = input;
+        for (i, layer) in self.layers.iter().enumerate() {
+            x = layer.forward(x);
+            if i < self.layers.len() - 1 {
+                x = RectifiedLinearUnit {}.forward(vec![x]);
+            }
+        }
+        x
     }
 }
 
