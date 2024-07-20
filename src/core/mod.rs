@@ -71,6 +71,7 @@ pub struct TensorBuilder {
     array: ArrayD<f32>,
     identifier: Option<String>,
     requires_gradient: bool,
+    gradient: RefCell<Option<ArrayD<f32>>>,
     origin: Option<Origin>,
 }
 
@@ -79,7 +80,8 @@ impl TensorBuilder {
         TensorBuilder {
             array,
             identifier: None,
-            requires_gradient: true,
+            requires_gradient: true, // shouldn't this be false?
+            gradient: RefCell::new(None),
             origin: None,
         }
     }
@@ -91,6 +93,11 @@ impl TensorBuilder {
 
     pub fn requires_gradient(mut self, requires: bool) -> TensorBuilder {
         self.requires_gradient = requires;
+        self
+    }
+
+    pub fn gradient(self, gradient: ArrayD<f32>) -> TensorBuilder {
+        *self.gradient.borrow_mut() = Some(gradient);
         self
     }
 
@@ -107,7 +114,7 @@ impl TensorBuilder {
                 None => generate_sequential_tensor_id(),
             },
             requires_gradient: self.requires_gradient,
-            gradient: RefCell::new(None),
+            gradient: self.gradient,
             origin: self.origin,
         }
     }
