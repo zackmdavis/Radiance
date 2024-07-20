@@ -16,7 +16,7 @@ pub struct StochasticGradientDescentOptimizer {
 }
 
 impl StochasticGradientDescentOptimizer {
-    fn new(parameters: Vec<Rc<Tensor>>, learning_rate: f32) -> Self {
+    pub fn new(parameters: Vec<Rc<Tensor>>, learning_rate: f32) -> Self {
         Self {
             parameters,
             learning_rate,
@@ -24,7 +24,7 @@ impl StochasticGradientDescentOptimizer {
         }
     }
 
-    pub fn step(&self) {
+    pub fn step(&mut self) {
         for parameter in &self.parameters {
             let mut array = parameter.array.borrow_mut();
             // Compiler refuses to one-shot conversion from
@@ -33,6 +33,10 @@ impl StochasticGradientDescentOptimizer {
             let some_and_gradient = and_some_gradient.as_ref();
             let gradient = some_and_gradient.expect("gradient should exist");
             *array -= &(self.learning_rate * gradient);
+        }
+        self.step_count += 1;
+        if self.step_count % 10 == 0 {
+            println!("optimization step {}!", self.step_count);
         }
     }
 
@@ -52,20 +56,24 @@ mod tests {
     #[test]
     fn test_optimization_step() {
         // Test written by Claude Sonnet 3.5
-        let tensor1 = Rc::new(TensorBuilder::new(array![[1.0, 2.0], [3.0, 4.0]].into_dyn())
-            .requires_gradient(true)
-            .gradient(array![[0.1, 0.2], [0.3, 0.4]].into_dyn())
-            .build());
+        let tensor1 = Rc::new(
+            TensorBuilder::new(array![[1.0, 2.0], [3.0, 4.0]].into_dyn())
+                .requires_gradient(true)
+                .gradient(array![[0.1, 0.2], [0.3, 0.4]].into_dyn())
+                .build(),
+        );
 
-        let tensor2 = Rc::new(TensorBuilder::new(array![5.0, 6.0].into_dyn())
-            .requires_gradient(true)
-            .gradient(array![0.5, 0.6].into_dyn())
-            .build());
+        let tensor2 = Rc::new(
+            TensorBuilder::new(array![5.0, 6.0].into_dyn())
+                .requires_gradient(true)
+                .gradient(array![0.5, 0.6].into_dyn())
+                .build(),
+        );
 
         // Create optimizer
         let parameters = vec![tensor1.clone(), tensor2.clone()];
         let learning_rate = 0.1;
-        let optimizer = StochasticGradientDescentOptimizer::new(parameters, learning_rate);
+        let mut optimizer = StochasticGradientDescentOptimizer::new(parameters, learning_rate);
 
         // Perform optimization step
         optimizer.step();
@@ -91,5 +99,4 @@ mod tests {
         assert!(tensor1.gradient.borrow().is_none());
         assert!(tensor2.gradient.borrow().is_none());
     }
-
 }

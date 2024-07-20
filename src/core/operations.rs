@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use ndarray::prelude::*;
 
-use super::{backprop, Origin, Tensor, TensorBuilder};
+use super::{Origin, Tensor, TensorBuilder};
 
 pub(super) struct Addition {}
 
@@ -157,6 +157,48 @@ impl Operation for RectifiedLinearUnit {
     }
 }
 
+pub(super) struct Reshape {
+    new_shape: Vec<usize>,
+}
+
+impl Reshape {
+    pub fn new(new_shape: Vec<usize>) -> Self {
+        Self { new_shape }
+    }
+}
+
+impl Operation for Reshape {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 1, "unary operation expected");
+        let array = inputs[0]
+            .array
+            .borrow()
+            .clone()
+            .into_shape(self.new_shape.clone())
+            .expect("input must match");
+        let origin = Origin {
+            operation: Box::new(Reshape {
+                new_shape: self.new_shape.clone(),
+            }),
+            parents: inputs.clone(),
+        };
+        Rc::new(TensorBuilder::new(array).origin(origin).build())
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        arg_index: usize,
+    ) -> ArrayD<f32> {
+        assert!(arg_index == 0);
+        out_gradient
+            .clone()
+            .into_shape(args[0].array.borrow().shape())
+            .expect("input shape should match")
+    }
+}
+
 pub(super) struct SquaredError {}
 
 impl Operation for SquaredError {
@@ -183,7 +225,7 @@ impl Operation for SquaredError {
         arg_index: usize,
     ) -> ArrayD<f32> {
         // d/dx (y − x)² = 2(y − x) · d/dx(y − x) = 2(y − x) · −1 = −2(y − x)
-        // d/dy (y − x)² = 2(y − x) · d/dy(y − x) = 2(y − x) · −1 = 2(y − x)
+        // d/dy (y − x)² = 2(y − x) · d/dy(y − x) = 2(y − x) · 1 = 2(y − x)
         let prediction = args[0].array.borrow()[0];
         let target = args[1].array.borrow()[0];
         let ddp = 2. * (target - prediction);
@@ -199,6 +241,7 @@ impl Operation for SquaredError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::backprop;
 
     #[test]
     fn test_addition_forward() {

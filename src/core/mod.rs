@@ -12,13 +12,11 @@ use ndarray_rand::RandomExt;
 
 use topological_sort::TopologicalSort;
 
-mod operations;
-mod optimization;
-mod demo;
+pub mod demo;
+pub mod operations;
+pub mod optimization;
 
-use self::operations::{
-    Addition, MatrixMultiplication, Multiplication, Operation,
-};
+use self::operations::{Addition, MatrixMultiplication, Operation};
 
 lazy_static! {
     static ref COUNTER: Mutex<u64> = Mutex::new(0);
@@ -97,6 +95,7 @@ impl TensorBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn gradient(self, gradient: ArrayD<f32>) -> TensorBuilder {
         *self.gradient.borrow_mut() = Some(gradient);
         self
@@ -118,6 +117,18 @@ impl TensorBuilder {
             gradient: self.gradient,
             origin: self.origin,
         }
+    }
+}
+
+impl From<Vec<f32>> for Tensor {
+    fn from(value: Vec<f32>) -> Tensor {
+        TensorBuilder::new(Array::from_vec(value).into_dyn()).build()
+    }
+}
+
+impl From<f32> for Tensor {
+    fn from(value: f32) -> Tensor {
+        TensorBuilder::new(Array::from_vec(vec![value]).into_dyn()).build()
     }
 }
 
@@ -182,17 +193,21 @@ fn backprop(culmination: Rc<Tensor>) {
     }
 }
 
-#[allow(dead_code)]
 struct Linear {
+    #[allow(dead_code)]
     identifier: String,
     weights: Rc<Tensor>,
     biases: Rc<Tensor>,
 }
 
-#[allow(dead_code)]
 impl Linear {
     fn new(identifier: &str, in_dimensionality: usize, out_dimensionality: usize) -> Linear {
         let k = 1. / (in_dimensionality as f32);
+        println!(
+            "creating Linear layer with weights shape {:?} and biases shape {:?}",
+            (out_dimensionality, in_dimensionality),
+            (out_dimensionality, 1)
+        );
         Linear {
             identifier: identifier.to_owned(),
             weights: Rc::new(
@@ -209,7 +224,7 @@ impl Linear {
             ),
             biases: Rc::new(
                 TensorBuilder::new(
-                    Array::random((out_dimensionality,), Uniform::new(-k.sqrt(), k.sqrt()))
+                    Array::random((out_dimensionality, 1), Uniform::new(-k.sqrt(), k.sqrt()))
                         .into_dyn(),
                 )
                 .requires_gradient(true)
@@ -221,89 +236,95 @@ impl Linear {
 
     fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
         let product = MatrixMultiplication {}.forward(vec![self.weights.clone(), input]);
-        Addition {}.forward(vec![product, self.biases.clone()])
+        let sum = Addition {}.forward(vec![product, self.biases.clone()]);
+        sum
     }
 }
 
-#[test]
-fn test_backprop() {
-    // Test written by Claude 3.5 Sonnet
-    let a = Rc::new(
-        TensorBuilder::new(array![2.0].into_dyn())
-            .identifier("a".to_string())
-            .requires_gradient(true)
-            .build(),
-    );
-    let b = Rc::new(
-        TensorBuilder::new(array![3.0].into_dyn())
-            .identifier("b".to_string())
-            .requires_gradient(true)
-            .build(),
-    );
-    let c = Rc::new(
-        TensorBuilder::new(array![4.0].into_dyn())
-            .identifier("c".to_string())
-            .requires_gradient(true)
-            .build(),
-    );
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::operations::Multiplication;
+    #[test]
+    fn test_backprop() {
+        // Test written by Claude 3.5 Sonnet
+        let a = Rc::new(
+            TensorBuilder::new(array![2.0].into_dyn())
+                .identifier("a".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+        let b = Rc::new(
+            TensorBuilder::new(array![3.0].into_dyn())
+                .identifier("b".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+        let c = Rc::new(
+            TensorBuilder::new(array![4.0].into_dyn())
+                .identifier("c".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
 
-    let mul = Multiplication {}.forward(vec![a.clone(), b.clone()]);
-    let result = Addition {}.forward(vec![mul, c.clone()]);
+        let mul = Multiplication {}.forward(vec![a.clone(), b.clone()]);
+        let result = Addition {}.forward(vec![mul, c.clone()]);
 
-    backprop(result);
+        backprop(result);
 
-    assert_eq!(
-        *a.gradient.borrow().as_ref().unwrap(),
-        array![3.0].into_dyn()
-    );
-    assert_eq!(
-        *b.gradient.borrow().as_ref().unwrap(),
-        array![2.0].into_dyn()
-    );
-    assert_eq!(
-        *c.gradient.borrow().as_ref().unwrap(),
-        array![1.0].into_dyn()
-    );
-}
+        assert_eq!(
+            *a.gradient.borrow().as_ref().unwrap(),
+            array![3.0].into_dyn()
+        );
+        assert_eq!(
+            *b.gradient.borrow().as_ref().unwrap(),
+            array![2.0].into_dyn()
+        );
+        assert_eq!(
+            *c.gradient.borrow().as_ref().unwrap(),
+            array![1.0].into_dyn()
+        );
+    }
 
-#[test]
-fn test_backprop_with_reuse() {
-    // Test written by Claude 3.5 Sonnet
-    let a = Rc::new(
-        TensorBuilder::new(array![2.0].into_dyn())
-            .identifier("a".to_string())
-            .requires_gradient(true)
-            .build(),
-    );
-    let b = Rc::new(
-        TensorBuilder::new(array![3.0].into_dyn())
-            .identifier("b".to_string())
-            .requires_gradient(true)
-            .build(),
-    );
+    #[test]
+    fn test_backprop_with_reuse() {
+        // Test written by Claude 3.5 Sonnet
+        let a = Rc::new(
+            TensorBuilder::new(array![2.0].into_dyn())
+                .identifier("a".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+        let b = Rc::new(
+            TensorBuilder::new(array![3.0].into_dyn())
+                .identifier("b".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
 
-    // Compute (a * b) + (a + b)
-    let mul = Multiplication {}.forward(vec![a.clone(), b.clone()]);
-    let add = Addition {}.forward(vec![a.clone(), b.clone()]);
-    let result = Addition {}.forward(vec![mul, add]);
+        // Compute (a * b) + (a + b)
+        let mul = Multiplication {}.forward(vec![a.clone(), b.clone()]);
+        let add = Addition {}.forward(vec![a.clone(), b.clone()]);
+        let result = Addition {}.forward(vec![mul, add]);
 
-    backprop(result);
+        backprop(result);
 
-    // Gradient for 'a':
-    // From (a * b): derivative is b = 3
-    // From (a + b): derivative is 1
-    // Total: 3 + 1 = 4
-    assert_eq!(
-        *a.gradient.borrow().as_ref().unwrap(),
-        array![4.0].into_dyn()
-    );
+        // Gradient for 'a':
+        // From (a * b): derivative is b = 3
+        // From (a + b): derivative is 1
+        // Total: 3 + 1 = 4
+        assert_eq!(
+            *a.gradient.borrow().as_ref().unwrap(),
+            array![4.0].into_dyn()
+        );
 
-    // Gradient for 'b':
-    // From (a * b): derivative is a = 2
-    // From (a + b): derivative is 1
-    // Total: 2 + 1 = 3
-    assert_eq!(
-        *b.gradient.borrow().as_ref().unwrap(),
-        array![3.0].into_dyn()
-    );
+        // Gradient for 'b':
+        // From (a * b): derivative is a = 2
+        // From (a + b): derivative is 1
+        // Total: 2 + 1 = 3
+        assert_eq!(
+            *b.gradient.borrow().as_ref().unwrap(),
+            array![3.0].into_dyn()
+        );
+    }
 }
