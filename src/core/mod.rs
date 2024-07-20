@@ -31,7 +31,7 @@ fn generate_sequential_tensor_id() -> String {
 
 pub struct Tensor {
     identifier: String,
-    array: ArrayD<f32>,
+    array: RefCell<ArrayD<f32>>,
     requires_gradient: bool,
     gradient: RefCell<Option<ArrayD<f32>>>,
     origin: Option<Origin>,
@@ -101,7 +101,7 @@ impl TensorBuilder {
 
     pub fn build(self) -> Tensor {
         Tensor {
-            array: self.array,
+            array: RefCell::new(self.array),
             identifier: match self.identifier {
                 Some(identifier) => identifier,
                 None => generate_sequential_tensor_id(),
@@ -140,7 +140,7 @@ fn backprop(culmination: Rc<Tensor>) {
     let mut gradients = HashMap::<String, ArrayD<f32>>::new();
     gradients.insert(
         culmination.identifier.clone(),
-        Array::ones(culmination.array.shape()).into_dyn(),
+        Array::ones(culmination.array.borrow().shape()).into_dyn(),
     );
     for node in sorted_computation_graph(culmination) {
         let gradient = gradients

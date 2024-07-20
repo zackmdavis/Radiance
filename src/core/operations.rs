@@ -20,7 +20,7 @@ impl Operation for Addition {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
         assert!(inputs.len() == 2, "binary operation expected");
         // clone has dubious performance implications?
-        let array = inputs[0].array.clone() + inputs[1].array.clone();
+        let array = inputs[0].array.borrow().clone() + inputs[1].array.borrow().clone();
         let origin = Origin {
             operation: Box::new(Addition {}),
             parents: vec![inputs[0].clone(), inputs[1].clone()],
@@ -43,7 +43,7 @@ pub(super) struct Multiplication {}
 impl Operation for Multiplication {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
         assert!(inputs.len() == 2, "binary operation expected");
-        let array = inputs[0].array.clone() * inputs[1].array.clone(); // dubious performance &c.
+        let array = inputs[0].array.borrow().clone() * inputs[1].array.borrow().clone(); // dubious performance &c.
         let origin = Origin {
             operation: Box::new(Multiplication {}),
             parents: vec![inputs[0].clone(), inputs[1].clone()],
@@ -62,7 +62,7 @@ impl Operation for Multiplication {
             _ => panic!("binary operation expected"),
         };
         // d/dx(xy) = y
-        out_gradient * args[other_arg_index].array.clone() // dubious perf &c.
+        out_gradient * args[other_arg_index].array.borrow().clone() // dubious perf &c.
     }
 }
 
@@ -73,11 +73,13 @@ impl Operation for MatrixMultiplication {
         assert!(inputs.len() == 2, "binary operation expected");
         let a = inputs[0]
             .array
+            .borrow()
             .clone()
             .into_dimensionality::<Ix2>()
             .expect("two-dimensional");
         let b = inputs[1]
             .array
+            .borrow()
             .clone()
             .into_dimensionality::<Ix2>()
             .expect("two-dimensional");
@@ -105,6 +107,7 @@ impl Operation for MatrixMultiplication {
             0 => {
                 let other = args[1]
                     .array
+                    .borrow()
                     .clone()
                     .into_dimensionality::<Ix2>()
                     .expect("arg1 is two-dimensional");
@@ -114,6 +117,7 @@ impl Operation for MatrixMultiplication {
             1 => {
                 let other = args[0]
                     .array
+                    .borrow()
                     .clone()
                     .into_dimensionality::<Ix2>()
                     .expect("arg0 is two-dimensional");
@@ -130,7 +134,10 @@ pub(super) struct RectifiedLinearUnit {}
 impl Operation for RectifiedLinearUnit {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
         assert!(inputs.len() == 1, "unary operation expected");
-        let array = inputs[0].array.map(|&x| if x > 0. { x } else { 0. });
+        let array = inputs[0]
+            .array
+            .borrow()
+            .map(|&x| if x > 0. { x } else { 0. });
         let origin = Origin {
             operation: Box::new(RectifiedLinearUnit {}),
             parents: vec![inputs[0].clone()],
@@ -144,8 +151,8 @@ impl Operation for RectifiedLinearUnit {
         args: Vec<Rc<Tensor>>,
         _arg_index: usize,
     ) -> ArrayD<f32> {
-        let mut gradient = Array::zeros(args[0].array.shape()).into_dyn();
-        azip!((g in &mut gradient, o in out_gradient, a in &args[0].array) if a > &0. { *g += o });
+        let mut gradient = Array::zeros(args[0].array.borrow().shape()).into_dyn();
+        azip!((g in &mut gradient, o in out_gradient, a in &*args[0].array.borrow()) if a > &0. { *g += o });
         gradient
     }
 }
@@ -159,7 +166,7 @@ mod tests {
         let a = TensorBuilder::new(array![1.].into_dyn()).build();
         let b = TensorBuilder::new(array![2.].into_dyn()).build();
         let c = Addition {}.forward(vec![Rc::new(a), Rc::new(b)]);
-        assert_eq!(c.array, array![3.].into_dyn());
+        assert_eq!(*c.array.borrow(), array![3.].into_dyn());
     }
 
     #[test]
@@ -167,7 +174,7 @@ mod tests {
         let a = TensorBuilder::new(array![2.].into_dyn()).build();
         let b = TensorBuilder::new(array![3.].into_dyn()).build();
         let c = Multiplication {}.forward(vec![Rc::new(a), Rc::new(b)]);
-        assert_eq!(c.array, array![6.].into_dyn());
+        assert_eq!(*c.array.borrow(), array![6.].into_dyn());
     }
 
     #[test]
@@ -223,7 +230,10 @@ mod tests {
         let result = matmul.forward(vec![a.clone(), b.clone()]);
 
         // Check forward pass result
-        assert_eq!(result.array, array![[19., 22.], [43., 50.]].into_dyn());
+        assert_eq!(
+            *result.array.borrow(),
+            array![[19., 22.], [43., 50.]].into_dyn()
+        );
 
         // Perform backward pass
         let out_gradient = array![[1., 1.], [1., 1.]].into_dyn();
@@ -270,7 +280,10 @@ mod tests {
         let result = matmul.forward(vec![a.clone(), b.clone()]);
 
         // Check forward pass result
-        assert_eq!(result.array, array![[58., 64.], [139., 154.]].into_dyn());
+        assert_eq!(
+            *result.array.borrow(),
+            array![[58., 64.], [139., 154.]].into_dyn()
+        );
 
         // Test full backpropagation
         backprop(result);
@@ -301,7 +314,10 @@ mod tests {
         let result = relu.forward(vec![input.clone()]);
 
         // Check forward pass result
-        assert_eq!(result.array, array![0.0, 0.0, 0.0, 1.0, 2.0].into_dyn());
+        assert_eq!(
+            *result.array.borrow(),
+            array![0.0, 0.0, 0.0, 1.0, 2.0].into_dyn()
+        );
 
         // Test full backpropagation
         backprop(result);
@@ -321,6 +337,9 @@ mod tests {
         );
 
         let result2 = relu.forward(vec![input2.clone()]);
-        assert_eq!(result2.array, array![0.0, 0.0, 1.0, 2.0, 3.0].into_dyn());
+        assert_eq!(
+            *result2.array.borrow(),
+            array![0.0, 0.0, 1.0, 2.0, 3.0].into_dyn()
+        );
     }
 }
