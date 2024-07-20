@@ -14,9 +14,10 @@ use topological_sort::TopologicalSort;
 
 mod operations;
 mod optimization;
+mod demo;
 
 use self::operations::{
-    Addition, MatrixMultiplication, Multiplication, Operation, RectifiedLinearUnit,
+    Addition, MatrixMultiplication, Multiplication, Operation,
 };
 
 lazy_static! {
@@ -221,40 +222,6 @@ impl Linear {
     fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
         let product = MatrixMultiplication {}.forward(vec![self.weights.clone(), input]);
         Addition {}.forward(vec![product, self.biases.clone()])
-    }
-}
-
-#[allow(dead_code)]
-struct MyLittlePerceptron {
-    layers: Vec<Linear>,
-}
-
-#[allow(dead_code)]
-impl MyLittlePerceptron {
-    fn new(layer_dimensionalities: Vec<usize>) -> Self {
-        let mut layers = Vec::new();
-        for (i, window) in layer_dimensionalities.windows(2).enumerate() {
-            let &[in_dimensionality, out_dimensionality] = window else {
-                panic!("impossible")
-            };
-            layers.push(Linear::new(
-                &format!("Layer{}", i),
-                in_dimensionality,
-                out_dimensionality,
-            ));
-        }
-        Self { layers }
-    }
-
-    fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
-        let mut x = input;
-        for (i, layer) in self.layers.iter().enumerate() {
-            x = layer.forward(x);
-            if i < self.layers.len() - 1 {
-                x = RectifiedLinearUnit {}.forward(vec![x]);
-            }
-        }
-        x
     }
 }
 

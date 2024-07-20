@@ -139,6 +139,7 @@ dependencies = [
  "ndarray",
  "ndarray-rand",
  "num-traits",
+ "rand",
  "topological-sort",
 ]
 

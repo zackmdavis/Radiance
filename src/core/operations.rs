@@ -157,6 +157,29 @@ impl Operation for RectifiedLinearUnit {
     }
 }
 
+#[allow(dead_code)]
+pub(super) struct MeanSquaredError {}
+
+#[allow(dead_code)]
+impl Operation for MeanSquaredError {
+    fn forward(&self, _inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        // TODO
+        Rc::new(TensorBuilder::new(array![0.0].into_dyn()).build())
+    }
+
+    fn backward(
+        &self,
+        _out_gradient: &ArrayD<f32>,
+        _args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        // TODO
+        array![0.0].into_dyn()
+    }
+
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
