@@ -157,28 +157,44 @@ impl Operation for RectifiedLinearUnit {
     }
 }
 
-#[allow(dead_code)]
-pub(super) struct MeanSquaredError {}
+pub(super) struct SquaredError {}
 
-#[allow(dead_code)]
-impl Operation for MeanSquaredError {
-    fn forward(&self, _inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
-        // TODO
-        Rc::new(TensorBuilder::new(array![0.0].into_dyn()).build())
+impl Operation for SquaredError {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 2, "binary operation expected");
+        let prediction = inputs[0].array.borrow()[0];
+        let target = inputs[1].array.borrow()[0];
+        let squared_error = (target - prediction).powf(2.0);
+        let origin = Origin {
+            operation: Box::new(SquaredError {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(
+            TensorBuilder::new(array![squared_error].into_dyn())
+                .origin(origin)
+                .build(),
+        )
     }
 
     fn backward(
         &self,
-        _out_gradient: &ArrayD<f32>,
-        _args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        arg_index: usize,
     ) -> ArrayD<f32> {
-        // TODO
-        array![0.0].into_dyn()
+        // d/dx (y − x)² = 2(y − x) · d/dx(y − x) = 2(y − x) · −1 = −2(y − x)
+        // d/dy (y − x)² = 2(y − x) · d/dy(y − x) = 2(y − x) · −1 = 2(y − x)
+        let prediction = args[0].array.borrow()[0];
+        let target = args[1].array.borrow()[0];
+        let ddp = 2. * (target - prediction);
+        let local_gradient = match arg_index {
+            0 => ddp,
+            1 => -ddp,
+            _ => panic!("binary operation expected"),
+        };
+        out_gradient * array![local_gradient].into_dyn()
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -364,5 +380,40 @@ mod tests {
             *result2.array.borrow(),
             array![0.0, 0.0, 1.0, 2.0, 3.0].into_dyn()
         );
+    }
+
+    #[test]
+    fn test_squared_error() {
+        // Test written by Claude Sonnet 3.5
+        let prediction = Rc::new(
+            TensorBuilder::new(array![0.7].into_dyn())
+                .identifier("prediction".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+        let target = Rc::new(
+            TensorBuilder::new(array![1.0].into_dyn())
+                .identifier("target".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let squared_error = SquaredError {};
+        let result = squared_error.forward(vec![prediction.clone(), target.clone()]);
+
+        // Check forward pass result
+        assert!((result.array.borrow()[0] - 0.09).abs() < 1e-6);
+
+        // Test backward pass
+        backprop(result);
+
+        // Check gradients after backpropagation
+        let prediction_gradient = prediction.gradient.borrow();
+        let target_gradient = target.gradient.borrow();
+
+        println!("{}", prediction_gradient.as_ref().unwrap()[0]);
+        println!("{}", target_gradient.as_ref().unwrap()[0]);
+        assert!((prediction_gradient.as_ref().unwrap()[0] - 0.6).abs() < 1e-6);
+        assert!((target_gradient.as_ref().unwrap()[0] + 0.6).abs() < 1e-6);
     }
 }
