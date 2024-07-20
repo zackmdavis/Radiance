@@ -13,6 +13,7 @@ use ndarray_rand::RandomExt;
 use topological_sort::TopologicalSort;
 
 mod operations;
+mod optimization;
 
 use self::operations::{
     Addition, MatrixMultiplication, Multiplication, Operation, RectifiedLinearUnit,
@@ -59,6 +60,12 @@ impl PartialEq for Tensor {
 }
 
 impl Eq for Tensor {}
+
+impl Tensor {
+    fn unset_gradient(&self) {
+        *self.gradient.borrow_mut() = None
+    }
+}
 
 pub struct TensorBuilder {
     array: ArrayD<f32>,
