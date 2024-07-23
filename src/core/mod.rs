@@ -200,38 +200,67 @@ struct Linear {
     biases: Rc<Tensor>,
 }
 
+#[allow(dead_code)]
+fn generate_test_weight(i: usize, j: usize, in_dimensionality: usize) -> f32 {
+    // contributed by Claude Sonnet 3.5
+    let limit = (1.0 / (in_dimensionality as f32)).sqrt();
+    let pseudo_random = ((i * 31 + j * 37) % 1009) as f32 / 1009.0;
+    2.0 * limit * pseudo_random - limit
+}
+
 impl Linear {
+    fn from_weights(identifier: &str, weights: ArrayD<f32>, biases: ArrayD<f32>) -> Linear {
+        Linear {
+            identifier: identifier.to_owned(),
+            weights: Rc::new(
+                TensorBuilder::new(weights)
+                    .requires_gradient(true)
+                    .identifier(format!("{}_weights", identifier))
+                    .build(),
+            ),
+            biases: Rc::new(
+                TensorBuilder::new(biases)
+                    .requires_gradient(true)
+                    .identifier(format!("{}_biases", identifier))
+                    .build(),
+            ),
+        }
+    }
+
     fn new(identifier: &str, in_dimensionality: usize, out_dimensionality: usize) -> Linear {
         let k = 1. / (in_dimensionality as f32);
+        let weights = Array::random(
+            (out_dimensionality, in_dimensionality),
+            Uniform::new(-k.sqrt(), k.sqrt()),
+        )
+        .into_dyn();
+        let biases =
+            Array::random((out_dimensionality, 1), Uniform::new(-k.sqrt(), k.sqrt())).into_dyn();
+
         println!(
             "creating Linear layer with weights shape {:?} and biases shape {:?}",
             (out_dimensionality, in_dimensionality),
             (out_dimensionality, 1)
         );
-        Linear {
-            identifier: identifier.to_owned(),
-            weights: Rc::new(
-                TensorBuilder::new(
-                    Array::random(
-                        (out_dimensionality, in_dimensionality),
-                        Uniform::new(-k.sqrt(), k.sqrt()),
-                    )
-                    .into_dyn(),
-                )
-                .requires_gradient(true)
-                .identifier(format!("{}_weights", identifier))
-                .build(),
-            ),
-            biases: Rc::new(
-                TensorBuilder::new(
-                    Array::random((out_dimensionality, 1), Uniform::new(-k.sqrt(), k.sqrt()))
-                        .into_dyn(),
-                )
-                .requires_gradient(true)
-                .identifier(format!("{}_biases", identifier))
-                .build(),
-            ),
-        }
+        Self::from_weights(identifier, weights, biases)
+    }
+
+    #[allow(dead_code)]
+    fn new_with_test_weights(
+        identifier: &str,
+        in_dimensionality: usize,
+        out_dimensionality: usize,
+    ) -> Linear {
+        // thanks to Claude for the `from_shape_fn`/`generate_test_weight` design
+        let weights = Array::from_shape_fn((out_dimensionality, in_dimensionality), |(i, j)| {
+            generate_test_weight(i, j, in_dimensionality)
+        })
+        .into_dyn();
+        let biases = Array::from_shape_fn((out_dimensionality, 1), |(i, j)| {
+            generate_test_weight(i, j, in_dimensionality)
+        })
+        .into_dyn();
+        Self::from_weights(identifier, weights, biases)
     }
 
     fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
