@@ -157,6 +157,49 @@ impl Operation for RectifiedLinearUnit {
     }
 }
 
+pub(super) struct LeakyRectifiedLinearUnit {
+    leak: f32,
+}
+
+impl LeakyRectifiedLinearUnit {
+    fn new(leak: f32) -> Self {
+        Self { leak }
+    }
+}
+
+impl Operation for LeakyRectifiedLinearUnit {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 1, "unary operation expected");
+        let array = inputs[0]
+            .array
+            .borrow()
+            .map(|&x| if x > 0. { x } else { self.leak * x });
+        let origin = Origin {
+            operation: Box::new(LeakyRectifiedLinearUnit { leak: self.leak }),
+            parents: vec![inputs[0].clone()],
+        };
+        Rc::new(TensorBuilder::new(array).origin(origin).build())
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        let mut gradient = Array::zeros(args[0].array.borrow().shape()).into_dyn();
+        azip!(
+            (g in &mut gradient, o in out_gradient, a in &*args[0].array.borrow())
+              if a > &0. {
+                  *g += o
+              } else {
+                  *g += self.leak * o
+              }
+        );
+        gradient
+    }
+}
+
 pub(super) struct Reshape {
     new_shape: Vec<usize>,
 }
@@ -242,6 +285,7 @@ impl Operation for SquaredError {
 mod tests {
     use super::*;
     use crate::core::backprop;
+    use approx::assert_abs_diff_eq;
 
     #[test]
     fn test_addition_forward() {
@@ -423,6 +467,82 @@ mod tests {
             *result2.array.borrow(),
             array![0.0, 0.0, 1.0, 2.0, 3.0].into_dyn()
         );
+    }
+
+    #[test]
+    fn test_leaky_rectified_linear_unit() {
+        // Test written by Claude Sonnet 3.5
+        let leak = 0.01;
+        let lrelu = LeakyRectifiedLinearUnit::new(leak);
+
+        // Test case 1: Standard input
+        let input = Rc::new(
+            TensorBuilder::new(array![-2.0, -1.0, 0.0, 1.0, 2.0].into_dyn())
+                .identifier("input".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        // Perform forward pass
+        let result = lrelu.forward(vec![input.clone()]);
+
+        // Check forward pass result
+        assert_eq!(
+            *result.array.borrow(),
+            array![-0.02, -0.01, 0.0, 1.0, 2.0].into_dyn()
+        );
+
+        // Test full backpropagation
+        backprop(result);
+
+        // Check gradients after backpropagation
+        assert_eq!(
+            *input.gradient.borrow().as_ref().unwrap(),
+            array![0.01, 0.01, 0.01, 1.0, 1.0].into_dyn()
+        );
+
+        // Test case 2: Different input
+        let input2 = Rc::new(
+            TensorBuilder::new(array![-1.0, 0.0, 1.0, 2.0, 3.0].into_dyn())
+                .identifier("input2".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let result2 = lrelu.forward(vec![input2.clone()]);
+
+        assert_eq!(
+            *result2.array.borrow(),
+            array![-0.01, 0.0, 1.0, 2.0, 3.0].into_dyn()
+        );
+
+        // Test case 3: Edge cases
+        let input3 = Rc::new(
+            TensorBuilder::new(array![-0.001, 0.001, 1e-8, -1e-8].into_dyn())
+                .identifier("input3".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let result3 = lrelu.forward(vec![input3.clone()]);
+
+        assert_abs_diff_eq!(
+            *result3.array.borrow(),
+            array![-0.00001, 0.001, 1e-8, -1e-10].into_dyn()
+        );
+
+        // Test case 4: Different leak factor
+        let lrelu2 = LeakyRectifiedLinearUnit::new(0.1);
+        let input4 = Rc::new(
+            TensorBuilder::new(array![-1.0, 1.0].into_dyn())
+                .identifier("input4".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let result4 = lrelu2.forward(vec![input4.clone()]);
+
+        assert_eq!(*result4.array.borrow(), array![-0.1, 1.0].into_dyn());
     }
 
     #[test]
