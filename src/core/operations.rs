@@ -273,8 +273,8 @@ impl Operation for SquaredError {
         let target = args[1].array.borrow()[0];
         let ddp = 2. * (target - prediction);
         let local_gradient = match arg_index {
-            0 => ddp,
-            1 => -ddp,
+            0 => -ddp,
+            1 => ddp,
             _ => panic!("binary operation expected"),
         };
         out_gradient * array![local_gradient].into_dyn()
@@ -574,9 +574,7 @@ mod tests {
         let prediction_gradient = prediction.gradient.borrow();
         let target_gradient = target.gradient.borrow();
 
-        println!("{}", prediction_gradient.as_ref().unwrap()[0]);
-        println!("{}", target_gradient.as_ref().unwrap()[0]);
-        assert!((prediction_gradient.as_ref().unwrap()[0] - 0.6).abs() < 1e-6);
-        assert!((target_gradient.as_ref().unwrap()[0] + 0.6).abs() < 1e-6);
+        assert!((prediction_gradient.as_ref().unwrap()[0] + 0.6).abs() < 1e-6);
+        assert!((target_gradient.as_ref().unwrap()[0] - 0.6).abs() < 1e-6);
     }
 }

@@ -168,7 +168,6 @@ mod tests {
         assert_eq!((1.0_f32 != 1.0_f32) as u8 as f32, 0.0);
     }
 
-    #[ignore]
     #[test]
     fn test_weights_activations_gradients_etc() {
         // If we define the same network architecture in PyTorch, we should get
@@ -339,8 +338,6 @@ mod tests {
             expected_layer_1_bias_gradients,
             epsilon = 0.0001
         );
-
-        // these assertions fail because our gradients are pointing in the opposite direction?!
 
         optimizer.step();
 
