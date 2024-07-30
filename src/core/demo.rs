@@ -93,8 +93,8 @@ fn generate_xor_data(sample_count: usize) -> Vec<(Vec<f32>, f32)> {
 
 fn train_mlp() -> MyLittlePerceptron {
     let network = MyLittlePerceptron::new(vec![2, 4, 1], false);
-    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.01);
-    let training_data = generate_xor_data(100);
+    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.05);
+    let training_data = generate_xor_data(2000);
     for (raw_input, raw_expected_output) in training_data {
         let input_array = Array::from_shape_vec((2, 1), raw_input.to_vec())
             .expect("shape is correct")
@@ -106,11 +106,6 @@ fn train_mlp() -> MyLittlePerceptron {
             .into_dyn();
         let expected_output = Rc::new(TensorBuilder::new(expected_output_array).build());
         let output = network.forward(input.clone());
-        println!(
-            "input: {:?};\n output: {:?}\n\n",
-            input.array.borrow(),
-            output.array.borrow()
-        );
         let loss = SquaredError {}.forward(vec![expected_output, output]);
         backprop(loss);
         optimizer.step();
@@ -175,10 +170,7 @@ mod tests {
         let network = MyLittlePerceptron::new(vec![2, 4, 1], true);
 
         // magic numbers should be from the parallel PyTorch implementation (whose
-        // parallel test-weights function should have the same outputs) ...
-
-        // I think I copied the wrong magic numbers somewhere, because this
-        // shouldn't be passing while our network is still failing to converge?!
+        // parallel test-weights function should have the same outputs)
 
         let layer_0_weights_before = network.layers[0]
             .weights
