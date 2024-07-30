@@ -11,6 +11,8 @@ pub(super) trait Operation {
     fn backward(
         &self,
         _out_gradient: &ArrayD<f32>,
+        // TODO CONSISTENCY: why did I say `inputs` going forwards, but `args`
+        // going backwards?
         _args: Vec<Rc<Tensor>>,
         _arg_index: usize,
     ) -> ArrayD<f32>;
@@ -281,7 +283,83 @@ impl Operation for SquaredError {
     }
 }
 
-// TODO: softmax cross-entropy: https://stackoverflow.com/a/57661404
+struct SoftmaxCrossEntropy {}
+
+fn softmax(x: Array1<f32>) -> Array1<f32> {
+    let exp_x = x.iter().map(|x_i| x_i.exp()).collect::<Array1<f32>>();
+    let scale: f32 = exp_x.iter().sum();
+    let softmaxed = exp_x.iter().map(|x_i| x_i / scale).collect::<Array1<f32>>();
+    softmaxed
+}
+
+impl Operation for SoftmaxCrossEntropy {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 2, "binary operation expected");
+        let prediction = inputs[0]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix1>()
+            .expect("one-dimensional");
+        let target = inputs[1]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix1>()
+            .expect("one-dimensional");
+
+        // − Σ_i y_i · log softmax(x)_i
+        let softmaxed = softmax(prediction);
+        let loss: f32 = target.iter().zip(softmaxed).map(|(t, s)| -t * s.ln()).sum();
+
+        let origin = Origin {
+            operation: Box::new(SoftmaxCrossEntropy {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(
+            TensorBuilder::new(array![loss].into_dyn())
+                .origin(origin)
+                .build(),
+        )
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        assert!(args.len() == 2, "binary operation expected");
+        // But we're ignoring `_arg_index` because we only care about the
+        // gradient of the predictions.
+        let prediction = args[0]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix1>()
+            .expect("one-dimensional");
+        let target = args[1]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix1>()
+            .expect("one-dimensional");
+        let softmaxed = softmax(prediction);
+        // Loss is − Σ_i y_i · log softmax(x)_i
+        // = − Σ_i y_i · log(exp(x_i)/Σ_j exp(x_j))
+        // = − Σ_i y_i · (log(exp(x_i)) − log Σ_j exp(x_j))
+        // = − Σ_i y_i · (x_i − log Σ_j exp(x_j))
+        // so dL/dx_i = −y_i + (Σ_i y_i) · 1/(Σ_j exp(x_j)) · exp(x_j).
+        // But (Σ_i y_i) is unity (because it's a probability distribution),
+        // and the last two factors are themselves softmax
+        //
+        // The fact that this turns out to be so tidy is the motivation for
+        // combining a softmax activation with a cross entropy-loss as one
+        // operation.
+        out_gradient * target.iter().zip(softmaxed).map(|(t, s)| s - t).collect::<Array1<f32>>().into_dyn()
+    }
+}
+
 // TODO: token-embedding, positional-embedding, layernorm ...
 
 #[cfg(test)]
@@ -579,5 +657,57 @@ mod tests {
 
         assert!((prediction_gradient.as_ref().unwrap()[0] + 0.6).abs() < 1e-6);
         assert!((target_gradient.as_ref().unwrap()[0] - 0.6).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_softmax_cross_entropy() {
+        // Test drafted by Claude Sonnet 3.5, human-edited for correctness
+
+        // Create a prediction tensor (logits)
+        let prediction = Rc::new(
+            TensorBuilder::new(array![2.0, 1.0, 0.1].into_dyn())
+                .identifier("prediction".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        // Create a target tensor (true probabilities)
+        let target = Rc::new(
+            TensorBuilder::new(array![1.0, 0.0, 0.0].into_dyn())
+                .identifier("target".to_string())
+                .requires_gradient(false)
+                .build(),
+        );
+
+        let softmax_cross_entropy = SoftmaxCrossEntropy {};
+        let result = softmax_cross_entropy.forward(vec![prediction.clone(), target.clone()]);
+
+        assert_abs_diff_eq!(result.array.borrow()[0], 0.4170, epsilon = 0.0001);
+
+        // Test backward pass
+        backprop(result);
+
+        // Check gradients after backpropagation
+        let prediction_gradient = prediction.gradient.borrow();
+        let expected_gradients = array![-0.3410, 0.2424, 0.0986]; // from PyTorch—
+        // import torch
+        // criterion = torch.nn.CrossEntropyLoss()
+        // prediction = torch.tensor([2.0, 1.0, 0.1], requires_grad=True)
+        // target = torch.tensor([1., 0., 0.], requires_grad=True)
+        // loss = criterion(prediction, target)
+        // loss.backward()
+        //
+        // # In [2]: prediction.grad
+        // # Out[2]: tensor([-0.3410,  0.2424,  0.0986])
+
+        for (&actual, &expected) in prediction_gradient
+            .as_ref()
+            .unwrap()
+            .iter()
+            .zip(expected_gradients.iter())
+        {
+            assert_abs_diff_eq!(actual, expected, epsilon = 0.0001)
+        }
+        // The target doesn't require gradients, so we don't check its gradient
     }
 }
