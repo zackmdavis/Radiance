@@ -85,6 +85,7 @@ impl TensorBuilder {
         }
     }
 
+    // TODO (small): should this take a &str?
     pub fn identifier(mut self, identifier: String) -> TensorBuilder {
         self.identifier = Some(identifier);
         self
@@ -200,7 +201,6 @@ struct Linear {
     biases: Rc<Tensor>,
 }
 
-#[allow(dead_code)]
 fn generate_test_weight(i: usize, j: usize, in_dimensionality: usize) -> f32 {
     // contributed by Claude Sonnet 3.5
     let limit = (1.0 / (in_dimensionality as f32)).sqrt();
@@ -245,7 +245,6 @@ impl Linear {
         Self::from_weights(identifier, weights, biases)
     }
 
-    #[allow(dead_code)]
     fn new_with_test_weights(
         identifier: &str,
         in_dimensionality: usize,
@@ -274,6 +273,8 @@ impl Linear {
 mod tests {
     use super::*;
     use crate::core::operations::Multiplication;
+    use approx::assert_relative_eq;
+
     #[test]
     fn test_backprop() {
         // Test written by Claude 3.5 Sonnet
@@ -354,6 +355,40 @@ mod tests {
         assert_eq!(
             *b.gradient.borrow().as_ref().unwrap(),
             array![3.0].into_dyn()
+        );
+    }
+
+    #[test]
+    fn test_linear_forward() {
+        // Written by Claude Sonnet 3.5 (with human edits to satisfy borrow
+        // checker and fix dimensionality)
+
+        // Initialize Linear layer with known weights and biases
+        let weights = array![[0.1, -0.2], [0.3, 0.4], [-0.5, 0.6]].into_dyn();
+        let biases = array![[0.1], [-0.2], [0.3]].into_dyn();
+        let linear = Linear::from_weights("test_linear", weights, biases);
+
+        // Create input tensor
+        let input_data = array![[1.0], [2.0]].into_dyn();
+        let input = Rc::new(TensorBuilder::new(input_data)
+            .requires_gradient(true)
+            .identifier("input".to_owned())
+            .build());
+
+        // Perform forward pass
+        let output = linear.forward(input);
+        let output_array = output.array.borrow();
+        let answer = output_array.as_slice().unwrap();
+
+        // [1.0 * 0.1 + 2.0 * -0.2 + 0.1, 1.0 * 0.3 + 2.0 * 0.4 - 0.2, 1.0 * -0.5 + 2.0 * 0.6 + 0.3]
+        let expected_output = array![-0.2, 0.9, 1.0];
+        let expected_answer = expected_output.as_slice().unwrap();
+
+        // Compare outputs
+        assert_relative_eq!(
+            answer,
+            expected_answer,
+            epsilon = 1e-5
         );
     }
 }

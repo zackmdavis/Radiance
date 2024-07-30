@@ -1,20 +1,22 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use rand::Rng;
 
 use ndarray::prelude::*;
 
-use super::operations::{Operation, RectifiedLinearUnit, Reshape, SquaredError};
+use super::operations::{LeakyRectifiedLinearUnit, Operation, Reshape, SquaredError};
 use super::{backprop, Linear, Tensor, TensorBuilder};
 
 use super::optimization::StochasticGradientDescentOptimizer;
 
 struct MyLittlePerceptron {
     layers: Vec<Linear>,
+    activation_cache: RefCell<Option<Vec<Rc<Tensor>>>>,
 }
 
 impl MyLittlePerceptron {
-    fn new(layer_dimensionalities: Vec<usize>) -> Self {
+    fn new(layer_dimensionalities: Vec<usize>, test_weights: bool) -> Self {
         let mut layers = Vec::new();
         for (i, window) in layer_dimensionalities.windows(2).enumerate() {
             let &[in_dimensionality, out_dimensionality] = window else {
@@ -24,24 +26,41 @@ impl MyLittlePerceptron {
                 "initializing layer {} of dimensionality {}→{}",
                 i, in_dimensionality, out_dimensionality
             );
-            layers.push(Linear::new(
-                &format!("Layer{}", i),
-                in_dimensionality,
-                out_dimensionality,
-            ));
+            if test_weights {
+                layers.push(Linear::new_with_test_weights(
+                    &format!("Layer{}", i),
+                    in_dimensionality,
+                    out_dimensionality,
+                ));
+            } else {
+                layers.push(Linear::new(
+                    &format!("Layer{}", i),
+                    in_dimensionality,
+                    out_dimensionality,
+                ));
+            }
         }
-        Self { layers }
+        Self {
+            layers,
+            activation_cache: RefCell::new(None),
+        }
     }
 
     fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
         let mut x = input;
+        let mut activation_cache = Vec::new();
         for (i, layer) in self.layers.iter().enumerate() {
             x = layer.forward(x);
             if i < self.layers.len() - 1 {
-                x = RectifiedLinearUnit {}.forward(vec![x]);
+                x = LeakyRectifiedLinearUnit::new(0.1).forward(vec![x]);
             }
+            activation_cache.push(x.clone());
         }
-        // needs a reshape becuase we end up with a [1, 1] but the loss
+
+        // set the activation cache
+        *self.activation_cache.borrow_mut() = Some(activation_cache);
+
+        // needs a reshape because we end up with a [1, 1] but the loss
         // function is going to expect a [1]
         x = Reshape::new(vec![1]).forward(vec![x]);
         x
@@ -73,9 +92,9 @@ fn generate_xor_data(sample_count: usize) -> Vec<(Vec<f32>, f32)> {
 }
 
 fn train_mlp() -> MyLittlePerceptron {
-    let network = MyLittlePerceptron::new(vec![2, 4, 1]);
-    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.1);
-    let training_data = generate_xor_data(1000);
+    let network = MyLittlePerceptron::new(vec![2, 4, 1], false);
+    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.01);
+    let training_data = generate_xor_data(100);
     for (raw_input, raw_expected_output) in training_data {
         let input_array = Array::from_shape_vec((2, 1), raw_input.to_vec())
             .expect("shape is correct")
@@ -86,7 +105,12 @@ fn train_mlp() -> MyLittlePerceptron {
             .expect("shape is correct")
             .into_dyn();
         let expected_output = Rc::new(TensorBuilder::new(expected_output_array).build());
-        let output = network.forward(input);
+        let output = network.forward(input.clone());
+        println!(
+            "input: {:?};\n output: {:?}\n\n",
+            input.array.borrow(),
+            output.array.borrow()
+        );
         let loss = SquaredError {}.forward(vec![expected_output, output]);
         backprop(loss);
         optimizer.step();
@@ -111,6 +135,7 @@ pub fn demo() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_abs_diff_eq;
 
     #[test]
     fn test_xor_data_generation() {
@@ -141,5 +166,142 @@ mod tests {
         assert_eq!((0.0_f32 != 1.0_f32) as u8 as f32, 1.0);
         assert_eq!((1.0_f32 != 0.0_f32) as u8 as f32, 1.0);
         assert_eq!((1.0_f32 != 1.0_f32) as u8 as f32, 0.0);
+    }
+
+    #[test]
+    fn test_weights_activations_gradients_etc() {
+        // If we define the same network architecture in PyTorch, we should get
+        // the same results modulo floating point error.
+        let network = MyLittlePerceptron::new(vec![2, 4, 1], true);
+
+        // magic numbers should be from the parallel PyTorch implementation (whose
+        // parallel test-weights function should have the same outputs) ...
+
+        // I think I copied the wrong magic numbers somewhere, because this
+        // shouldn't be passing while our network is still failing to converge?!
+
+        let layer_0_weights_before = network.layers[0]
+            .weights
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+
+        let expected_layer_0_weights_before = Array::from_shape_vec(
+            (4, 2),
+            vec![
+                -0.7071, -0.6552, -0.6637, -0.6118, -0.6202, -0.5683, -0.5768, -0.5249,
+            ],
+        )
+        .unwrap();
+        assert_abs_diff_eq!(
+            layer_0_weights_before,
+            expected_layer_0_weights_before,
+            epsilon = 0.0001
+        );
+
+        let layer_0_biases_before = network.layers[0]
+            .biases
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+
+        let expected_layer_0_biases_before =
+            Array::from_shape_vec((4, 1), vec![-0.7071, -0.6637, -0.6202, -0.5768]).unwrap();
+
+        assert_abs_diff_eq!(
+            layer_0_biases_before,
+            expected_layer_0_biases_before,
+            epsilon = 0.0001
+        );
+
+        let layer_1_weights_before = network.layers[1]
+            .weights
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+
+        // danger: PyTorch version had shape [4], not [1, 4]
+        let expected_layer_1_weights_before =
+            Array::from_shape_vec((1, 4), vec![-0.5000f32, -0.4633, -0.4267, -0.3900]).unwrap();
+
+        let layer_1_biases_before = network.layers[1]
+            .biases
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+
+        let expected_layer_1_biases_before =
+            Array::from_shape_vec((1, 1), vec![-0.5000f32]).unwrap();
+
+        assert_abs_diff_eq!(
+            layer_1_weights_before,
+            expected_layer_1_weights_before,
+            epsilon = 0.0001
+        );
+        assert_abs_diff_eq!(
+            layer_1_biases_before,
+            expected_layer_1_biases_before,
+            epsilon = 0.0001
+        );
+
+        let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.05);
+        let raw_input = Array::from_shape_vec((2, 1), vec![1., 1.]).unwrap();
+
+        let input = Rc::new(TensorBuilder::new(raw_input.clone().into_dyn()).build());
+        let expected_output = Rc::new(
+            TensorBuilder::new(Array::from_shape_vec((1,), vec![1.]).unwrap().into_dyn()).build(),
+        );
+        let output = network.forward(input.clone());
+
+        let layer_0_activations = network
+            .activation_cache
+            .borrow()
+            .clone()
+            .expect("activations cached")[0]
+            .array
+            .borrow()
+            .clone();
+        let expected_layer_0_activations =
+            Array::from_shape_vec((4, 1), vec![-0.2069, -0.1939, -0.1809, -0.1678])
+                .unwrap()
+                .into_dyn();
+        assert_abs_diff_eq!(
+            layer_0_activations,
+            expected_layer_0_activations,
+            epsilon = 0.0001
+        );
+
+        let layer_1_activations = network
+            .activation_cache
+            .borrow()
+            .clone()
+            .expect("activations cached")[1]
+            .array
+            .borrow()
+            .clone();
+        let expected_layer_1_activations = Array::from_shape_vec((1, 1), vec![-0.1641])
+            .unwrap()
+            .into_dyn();
+        assert_abs_diff_eq!(
+            layer_1_activations,
+            expected_layer_1_activations,
+            epsilon = 0.0001
+        );
+
+        assert_abs_diff_eq!(output.array.borrow()[0], -0.16405, epsilon = 0.0001);
+        let loss = SquaredError {}.forward(vec![expected_output, output]);
+        backprop(loss);
+
+        optimizer.step();
+
+        // TODO further testing
     }
 }

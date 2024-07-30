@@ -162,7 +162,7 @@ pub(super) struct LeakyRectifiedLinearUnit {
 }
 
 impl LeakyRectifiedLinearUnit {
-    fn new(leak: f32) -> Self {
+    pub fn new(leak: f32) -> Self {
         Self { leak }
     }
 }
