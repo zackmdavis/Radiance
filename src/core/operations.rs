@@ -281,6 +281,9 @@ impl Operation for SquaredError {
     }
 }
 
+// TODO: softmax cross-entropy: https://stackoverflow.com/a/57661404
+// TODO: token-embedding, positional-embedding, layernorm ...
+
 #[cfg(test)]
 mod tests {
     use super::*;
