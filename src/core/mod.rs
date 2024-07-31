@@ -13,6 +13,7 @@ use ndarray_rand::RandomExt;
 use topological_sort::TopologicalSort;
 
 pub mod demo;
+pub mod embedding;
 pub mod operations;
 pub mod optimization;
 
@@ -28,6 +29,7 @@ fn generate_sequential_tensor_id() -> String {
     format!("Tensor{}", num)
 }
 
+// TODO SOMEDAY: genericize to Tensor<T> ... ArrayD<T> to support integer arrays?
 pub struct Tensor {
     identifier: String,
     array: RefCell<ArrayD<f32>>,
