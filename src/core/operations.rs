@@ -360,6 +360,8 @@ impl Operation for SoftmaxCrossEntropy {
     }
 }
 
+// `Lookup` Operation in embedding.rs
+
 // TODO: token-embedding, positional-embedding, layernorm ...
 
 #[cfg(test)]
