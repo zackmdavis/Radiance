@@ -42,7 +42,7 @@ impl TokenEmbedding {
     }
 }
 
-struct Lookup {}
+pub(super) struct Lookup {}
 
 impl Operation for Lookup {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {

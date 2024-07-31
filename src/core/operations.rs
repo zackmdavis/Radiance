@@ -283,7 +283,7 @@ impl Operation for SquaredError {
     }
 }
 
-struct SoftmaxCrossEntropy {}
+pub(super) struct SoftmaxCrossEntropy {}
 
 fn softmax(x: Array1<f32>) -> Array1<f32> {
     let exp_x = x.iter().map(|x_i| x_i.exp()).collect::<Array1<f32>>();
