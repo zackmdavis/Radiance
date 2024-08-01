@@ -372,10 +372,12 @@ mod tests {
 
         // Create input tensor
         let input_data = array![[1.0], [2.0]].into_dyn();
-        let input = Rc::new(TensorBuilder::new(input_data)
-            .requires_gradient(true)
-            .identifier("input".to_owned())
-            .build());
+        let input = Rc::new(
+            TensorBuilder::new(input_data)
+                .requires_gradient(true)
+                .identifier("input".to_owned())
+                .build(),
+        );
 
         // Perform forward pass
         let output = linear.forward(input);
@@ -387,10 +389,6 @@ mod tests {
         let expected_answer = expected_output.as_slice().unwrap();
 
         // Compare outputs
-        assert_relative_eq!(
-            answer,
-            expected_answer,
-            epsilon = 1e-5
-        );
+        assert_relative_eq!(answer, expected_answer, epsilon = 1e-5);
     }
 }

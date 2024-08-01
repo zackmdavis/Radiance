@@ -422,7 +422,13 @@ impl Operation for SoftmaxCrossEntropy {
         // The fact that this turns out to be so tidy is the motivation for
         // combining a softmax activation with a cross entropy-loss as one
         // operation.
-        out_gradient * target.iter().zip(softmaxed).map(|(t, s)| s - t).collect::<Array1<f32>>().into_dyn()
+        out_gradient
+            * target
+                .iter()
+                .zip(softmaxed)
+                .map(|(t, s)| s - t)
+                .collect::<Array1<f32>>()
+                .into_dyn()
     }
 }
 
@@ -757,7 +763,8 @@ mod tests {
 
         // Check gradients after backpropagation
         let prediction_gradient = prediction.gradient.borrow();
-        let expected_gradients = array![-0.3410, 0.2424, 0.0986]; // from PyTorch—
+        // from PyTorch—
+        //
         // import torch
         // criterion = torch.nn.CrossEntropyLoss()
         // prediction = torch.tensor([2.0, 1.0, 0.1], requires_grad=True)
@@ -767,6 +774,7 @@ mod tests {
         //
         // # In [2]: prediction.grad
         // # Out[2]: tensor([-0.3410,  0.2424,  0.0986])
+        let expected_gradients = array![-0.3410, 0.2424, 0.0986];
 
         for (&actual, &expected) in prediction_gradient
             .as_ref()
