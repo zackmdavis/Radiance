@@ -434,7 +434,7 @@ impl Operation for SoftmaxCrossEntropy {
 mod tests {
     use super::*;
     use crate::core::backprop;
-    use approx::{assert_abs_diff_eq, assert_relative_eq};
+    use approx::assert_abs_diff_eq;
 
     #[test]
     fn test_addition_forward() {
@@ -782,7 +782,7 @@ mod tests {
     #[test]
     fn test_softmax() {
         // Test written by Claude Sonnet 3.5, with human edits for correctness
-        // maybe, except I'm not actually confident this is correct?!
+        // and clarity
 
         // Create an input tensor
         let input = Rc::new(
@@ -802,14 +802,9 @@ mod tests {
         }
 
         // Test backward pass
-        // We'll use a simple gradient for demonstration
-        let out_gradient = array![1.0, 1.0, 1.0].into_dyn();
+        // Send an extreme gradient backwards to get a stronger signal
+        let out_gradient = array![10000.0, 1000.0, 1.0].into_dyn();
         let input_gradient = softmax.backward(&out_gradient, vec![input.clone()], 0);
-
-        // XXX CONCERN: I'm suspicious both of these tiny values, and whether
-        // `assert_relative_eq!` is being sufficiently intolerant of them. I
-        // have to believe that PyTorch is telling me the truth, but am I
-        // asking the right question?
 
         // from PyTorch—
         //
@@ -817,14 +812,16 @@ mod tests {
         // activation = torch.nn.Softmax(dim=0)
         // x = torch.tensor([2., 1., 0.1], requires_grad=True)
         // output = activation(x)
-        // output.backward(gradient=torch.ones_like(x))
+        // output.backward(gradient=torch.tensor([10000., 1000., 1.]))
 
         // In [2]: x.grad
-        // Out[2]: tensor([-7.8559e-08, -2.8900e-08, -1.1750e-08])
-        let expected_gradient = array![-7.8559e-08, -2.8900e-08, -1.1750e-08];
+        // Out[2]: tensor([ 2087.3577, -1414.0009,  -673.3572])
+        let expected_gradient = array![2087.3577, -1414.0009, -673.3572];
 
         for (&actual, &expected) in input_gradient.iter().zip(expected_gradient.iter()) {
-            assert_relative_eq!(actual, expected);
+            // TODO: can we tolerate a lower ɛ after making the numerical
+            // stability improvement to softmax?
+            assert_abs_diff_eq!(actual, expected, epsilon = 0.001);
         }
     }
 }
