@@ -1,3 +1,5 @@
+#![allow(mixed_script_confusables)]
+
 mod core;
 
 fn main() {

@@ -283,14 +283,80 @@ impl Operation for SquaredError {
     }
 }
 
-pub(super) struct SoftmaxCrossEntropy {}
-
 fn softmax(x: Array1<f32>) -> Array1<f32> {
+    // TODO: shift the maximum element to zero for numerical stability?
+    // https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
+    // #computing-softmax-and-numerical-stability
     let exp_x = x.iter().map(|x_i| x_i.exp()).collect::<Array1<f32>>();
     let scale: f32 = exp_x.iter().sum();
     let softmaxed = exp_x.iter().map(|x_i| x_i / scale).collect::<Array1<f32>>();
     softmaxed
 }
+
+pub(super) struct Softmax {}
+
+impl Operation for Softmax {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 1, "unary operation expected");
+        let softmaxed = softmax(
+            inputs[0]
+                .array
+                .borrow()
+                .clone()
+                .into_dimensionality::<Ix1>()
+                .expect("one-dimensional"),
+        );
+        let origin = Origin {
+            operation: Box::new(Softmax {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(
+            TensorBuilder::new(softmaxed.into_dyn())
+                .origin(origin)
+                .build(),
+        )
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        let softmaxed = softmax(
+            args[0]
+                .array
+                .borrow()
+                .clone()
+                .into_dimensionality::<Ix1>()
+                .expect("one-dimensional"),
+        );
+        let out_gradient = out_gradient
+            .clone()
+            .into_dimensionality::<Ix1>()
+            .expect("one-dimensional");
+        let n = softmaxed.len();
+        let δ = |i, j| {
+            if i == j {
+                1.
+            } else {
+                0.
+            }
+        };
+        // The entries of the derivative matrix dS_i/dx_j are
+        //
+        // softmax(x)_i ·(δ_ij − softmax(x)_j)
+        //
+        // which tells us how the softmax outputs varies with its inputs.
+        let d = Array2::from_shape_fn((n, n), |(i, j)| softmaxed[i] * (δ(i, j) - softmaxed[j]));
+        // The out-gradient dL/dS_i tells us how loss varies with the softmax outputs.
+        // So the product dS_i/dx_j · dL/dS_i = dL/dx_j tells
+        // us how loss varies with the inputs.
+        d.dot(&out_gradient).into_dyn()
+    }
+}
+
+pub(super) struct SoftmaxCrossEntropy {}
 
 impl Operation for SoftmaxCrossEntropy {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -368,7 +434,7 @@ impl Operation for SoftmaxCrossEntropy {
 mod tests {
     use super::*;
     use crate::core::backprop;
-    use approx::assert_abs_diff_eq;
+    use approx::{assert_abs_diff_eq, assert_relative_eq};
 
     #[test]
     fn test_addition_forward() {
@@ -711,5 +777,54 @@ mod tests {
             assert_abs_diff_eq!(actual, expected, epsilon = 0.0001)
         }
         // The target doesn't require gradients, so we don't check its gradient
+    }
+
+    #[test]
+    fn test_softmax() {
+        // Test written by Claude Sonnet 3.5, with human edits for correctness
+        // maybe, except I'm not actually confident this is correct?!
+
+        // Create an input tensor
+        let input = Rc::new(
+            TensorBuilder::new(array![2.0, 1.0, 0.1].into_dyn())
+                .identifier("input".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let softmax = Softmax {};
+
+        // Test forward pass
+        let result = softmax.forward(vec![input.clone()]);
+        let expected_output = array![0.6590, 0.2424, 0.0986];
+        for (&actual, &expected) in result.array.borrow().iter().zip(expected_output.iter()) {
+            assert_abs_diff_eq!(actual, expected, epsilon = 0.0001);
+        }
+
+        // Test backward pass
+        // We'll use a simple gradient for demonstration
+        let out_gradient = array![1.0, 1.0, 1.0].into_dyn();
+        let input_gradient = softmax.backward(&out_gradient, vec![input.clone()], 0);
+
+        // XXX CONCERN: I'm suspicious both of these tiny values, and whether
+        // `assert_relative_eq!` is being sufficiently intolerant of them. I
+        // have to believe that PyTorch is telling me the truth, but am I
+        // asking the right question?
+
+        // from PyTorch—
+        //
+        // import torch
+        // activation = torch.nn.Softmax(dim=0)
+        // x = torch.tensor([2., 1., 0.1], requires_grad=True)
+        // output = activation(x)
+        // output.backward(gradient=torch.ones_like(x))
+
+        // In [2]: x.grad
+        // Out[2]: tensor([-7.8559e-08, -2.8900e-08, -1.1750e-08])
+        let expected_gradient = array![-7.8559e-08, -2.8900e-08, -1.1750e-08];
+
+        for (&actual, &expected) in input_gradient.iter().zip(expected_gradient.iter()) {
+            assert_relative_eq!(actual, expected);
+        }
     }
 }
