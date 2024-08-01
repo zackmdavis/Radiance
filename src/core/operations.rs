@@ -432,6 +432,72 @@ impl Operation for SoftmaxCrossEntropy {
     }
 }
 
+struct Mask {}
+
+impl Operation for Mask {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 2, "binary operation expected");
+        let array = inputs[0]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let mask = inputs[1]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let masked = Array2::from_shape_fn(array.raw_dim(), |(i, j)| {
+            if mask[[i, j]] == 0. {
+                f32::NEG_INFINITY
+            } else {
+                array[[i, j]]
+            }
+        });
+        let origin = Origin {
+            operation: Box::new(Mask {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(TensorBuilder::new(masked.into_dyn()).origin(origin).build())
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        // We can ignore `_arg_index` because we only care about the gradient
+        // of the input being masked, not the mask itself?
+        //
+        // ... that actually seems kind of sketchy (backprop is still going to
+        // call it with _arg_index=1, the answer will be presumably wrong, and
+        // we're just betting that nothing important depends on that tensor
+        let array = args[0]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let mask = args[1]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        Array2::from_shape_fn(array.raw_dim(), |(i, j)| {
+            if mask[[i, j]] == 0. {
+                0.
+            } else {
+                out_gradient[[i, j]]
+            }
+        })
+        .into_dyn()
+    }
+}
+
 // `Lookup` Operation in embedding.rs
 
 // TODO: token-embedding, positional-embedding, layernorm ...
@@ -830,6 +896,47 @@ mod tests {
             // TODO: can we tolerate a lower ɛ after making the numerical
             // stability improvement to softmax?
             assert_abs_diff_eq!(actual, expected, epsilon = 0.001);
+        }
+    }
+
+    #[test]
+    fn test_mask() {
+        // Test written by Claude Sonnet 3.5
+
+        let input = Rc::new(
+            TensorBuilder::new(array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]].into_dyn())
+                .identifier("input".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        // Create a mask tensor
+        let mask = Rc::new(
+            TensorBuilder::new(array![[1.0, 1.0, 0.0], [1.0, 0.0, 1.0]].into_dyn())
+                .identifier("mask".to_string())
+                .requires_gradient(false)
+                .build(),
+        );
+
+        let mask_op = Mask {};
+
+        // Test forward pass
+        let result = mask_op.forward(vec![input.clone(), mask.clone()]);
+        let expected_output = array![[1.0, 2.0, f32::NEG_INFINITY], [4.0, f32::NEG_INFINITY, 6.0]];
+        for (&actual, &expected) in result.array.borrow().iter().zip(expected_output.iter()) {
+            if expected.is_finite() {
+                assert_abs_diff_eq!(actual, expected, epsilon = 0.0001);
+            } else {
+                assert!(!actual.is_finite());
+            }
+        }
+
+        // Test backward pass
+        let out_gradient = array![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]].into_dyn();
+        let input_gradient = mask_op.backward(&out_gradient, vec![input.clone(), mask.clone()], 0);
+        let expected_gradient = array![[0.1, 0.2, 0.0], [0.4, 0.0, 0.6]];
+        for (&actual, &expected) in input_gradient.iter().zip(expected_gradient.iter()) {
+            assert_abs_diff_eq!(actual, expected, epsilon = 0.0001);
         }
     }
 }

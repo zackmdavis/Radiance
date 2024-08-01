@@ -6,7 +6,6 @@ Radiance is an educational neural networks library and autodifferentiation frame
 
 ### big
 
- * `Mask` `Operation` probably?
  * build scaled dot-product attention from MatrixMultiplication, Multiplication, Mask, Softmax Operations??
    * https://paperswithcode.com/method/scaled
 
@@ -15,4 +14,6 @@ Radiance is an educational neural networks library and autodifferentiation frame
  * address TensorBuilder identifier infelicity
  * address `requires_gradient` dubious default infelicity
  * address input _vs._ args inconsistent naming infelicity
+ * ignored arguments in backward pass are sketchy
  * numerically stabler softmax
+ * reduce Origin boilerplate (more complicated than it looks; `Self {}` is not a legal constructor)
