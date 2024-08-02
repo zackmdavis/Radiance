@@ -12,6 +12,7 @@ use ndarray_rand::RandomExt;
 
 use topological_sort::TopologicalSort;
 
+pub mod attention;
 pub mod demo;
 pub mod embedding;
 pub mod operations;
