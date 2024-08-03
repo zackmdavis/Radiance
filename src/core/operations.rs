@@ -432,7 +432,7 @@ impl Operation for SoftmaxCrossEntropy {
     }
 }
 
-struct Mask {}
+pub(super) struct Mask {}
 
 impl Operation for Mask {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
