@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-approx = "0.4.0"
+approx = "0.5"
 lazy_static = "*"
-ndarray = {version = "*", features = ["approx"]}
-ndarray-rand = "0.14.0"
+ndarray = {git = "https://github.com/rust-ndarray/ndarray", features = ["approx"]}
+ndarray-rand = { git = "https://github.com/rust-ndarray/ndarray" }
 num-traits = "*"
 rand = "*"
 topological-sort = "*"

@@ -219,7 +219,7 @@ impl Operation for Reshape {
             .array
             .borrow()
             .clone()
-            .into_shape(self.new_shape.clone())
+            .into_shape_with_order(self.new_shape.clone())
             .expect("input must match");
         let origin = Origin {
             operation: Box::new(Reshape {
@@ -239,7 +239,7 @@ impl Operation for Reshape {
         assert!(arg_index == 0);
         out_gradient
             .clone()
-            .into_shape(args[0].array.borrow().shape())
+            .into_shape_with_order(args[0].array.borrow().shape())
             .expect("input shape should match")
     }
 }
