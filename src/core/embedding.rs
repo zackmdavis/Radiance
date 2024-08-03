@@ -7,6 +7,47 @@ use ndarray_rand::RandomExt;
 use super::operations::Operation;
 use super::{Origin, Tensor, TensorBuilder};
 
+#[allow(dead_code)]
+fn single_positional_encoding(position: usize, embedding_dimensionality: usize) -> Vec<f32> {
+    let mut vector = Vec::new();
+    let base: f32 = 30.;
+    for i in 0..embedding_dimensionality {
+        if i % 2 == 0 {
+            vector.push(
+                ((position as f32) / base.powf(i as f32 / embedding_dimensionality as f32)).sin(),
+            )
+        } else {
+            vector.push(
+                ((position as f32) / base.powf((i - 1) as f32 / embedding_dimensionality as f32))
+                    .cos(),
+            )
+        }
+    }
+    vector
+}
+
+#[allow(dead_code)]
+fn sequence_positional_encoding(length: usize, embedding_dimensionality: usize) -> Rc<Tensor> {
+    let mut position_embedding = Array2::zeros((0, embedding_dimensionality));
+    for position in 0..length {
+        position_embedding
+            .push_row(
+                Array::from_vec(single_positional_encoding(
+                    position,
+                    embedding_dimensionality,
+                ))
+                .view(),
+            )
+            .expect("row should fit");
+    }
+    Rc::new(
+        TensorBuilder::new(position_embedding.into_dyn())
+            .identifier(format!("positional_embedding_{}", embedding_dimensionality))
+            .requires_gradient(false)
+            .build(),
+    )
+}
+
 pub struct TokenEmbedding {
     #[allow(dead_code)]
     identifier: String,
@@ -64,7 +105,8 @@ impl Operation for Lookup {
             .expect("one-dimensional");
         let mut representation = Array2::zeros((0, embedding_matrix.shape()[1]));
         for token in sequence {
-            // token IDs are morally usize integers, but for now, my Tensors only support f32
+            // positions and token IDs are morally usize integers, but for now,
+            // my Tensors only support f32
             representation
                 .push_row(embedding_matrix.row(token as usize))
                 .expect("row should fit");

@@ -6,7 +6,6 @@ Radiance is an educational neural networks library and autodifferentiation frame
 
 ### big
 
- * positional embedding
  * figure out how to test AttentionHead
  * multi-attention-head
 
