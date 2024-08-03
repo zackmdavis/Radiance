@@ -110,10 +110,7 @@ impl AttentionHead {
         let scale =
             Rc::new(TensorBuilder::new((scale_factor * Array::ones((n, n))).into_dyn()).build());
         let scaled_qk_t = Multiplication {}.forward(vec![scale, qk_t]);
-        // TODO: need a mask
-        // https://github.com/rust-ndarray/ndarray/pull/1386 added `triu`, but
-        // there hasn't been an ndarray release in two years
-        let mask = Rc::new(TensorBuilder::new(Array::ones((n, n)).into_dyn()).build()); // .tril(0);
+        let mask = Rc::new(TensorBuilder::new(Array::ones((n, n)).tril(0).into_dyn()).build());
         let masked = Mask {}.forward(vec![scaled_qk_t, mask]);
         // TODO: this probably needs to be SoftmaxRows?
         let softmaxed = Softmax {}.forward(vec![masked]);
