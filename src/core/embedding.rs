@@ -13,6 +13,7 @@ pub struct TokenEmbedding {
     weights: Rc<Tensor>,
 }
 
+#[allow(dead_code)]
 impl TokenEmbedding {
     pub fn new(identifier: &str, vocabulary_size: usize, embedding_dimensionality: usize) -> Self {
         let weights = Array::random(
@@ -32,7 +33,6 @@ impl TokenEmbedding {
         }
     }
 
-    #[allow(dead_code)]
     pub fn dimensionality(&self) -> usize {
         self.weights.array.borrow().shape()[1]
     }
