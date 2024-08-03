@@ -244,6 +244,36 @@ impl Operation for Reshape {
     }
 }
 
+pub(super) struct Transpose {}
+
+impl Operation for Transpose {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 1, "unary operation expected");
+        let array = inputs[0].array.borrow().clone();
+        // .clone()
+        // .into_dimensionality::<Ix2>()
+        // .expect("two-dimensional");
+        let origin = Origin {
+            operation: Box::new(Transpose {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(
+            TensorBuilder::new(array.t().to_owned())
+                .origin(origin)
+                .build(),
+        )
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        _args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        out_gradient.t().to_owned()
+    }
+}
+
 pub(super) struct SquaredError {}
 
 impl Operation for SquaredError {
@@ -764,6 +794,59 @@ mod tests {
         let result4 = lrelu2.forward(vec![input4.clone()]);
 
         assert_eq!(*result4.array.borrow(), array![-0.1, 1.0].into_dyn());
+    }
+
+    #[test]
+    fn test_transpose() {
+        // Test written by Claude Sonnet 3.5
+
+        // Create a 2x3 input matrix
+        let input = Rc::new(
+            TensorBuilder::new(array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]].into_dyn())
+                .identifier("input".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let transpose = Transpose {};
+        let result = transpose.forward(vec![input.clone()]);
+
+        // Check forward pass result
+        let expected_result = array![[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]];
+        assert_eq!(result.array.borrow().shape(), &[3, 2]);
+        for (actual, expected) in result.array.borrow().iter().zip(expected_result.iter()) {
+            assert_abs_diff_eq!(*actual, *expected, epsilon = 1e-6);
+        }
+
+        // Create a non-uniform gradient for backpropagation
+        // This allows us to test if the gradient elements are correctly transposed,
+        // not just if the shape is correct
+        let out_gradient = Rc::new(
+            TensorBuilder::new(array![[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]].into_dyn())
+                .identifier("out_gradient".to_string())
+                .requires_gradient(false)
+                .build(),
+        );
+
+        // Multiply result by out_gradient to create a scalar result
+        let scalar_result = Multiplication {}.forward(vec![result, out_gradient]);
+
+        // Test backward pass
+        backprop(scalar_result);
+
+        // Check gradients after backpropagation
+        let input_gradient = input.gradient.borrow();
+        let expected_gradient = array![[0.1, 0.3, 0.5], [0.2, 0.4, 0.6]];
+
+        assert_eq!(input_gradient.as_ref().unwrap().shape(), &[2, 3]);
+        for (actual, expected) in input_gradient
+            .as_ref()
+            .unwrap()
+            .iter()
+            .zip(expected_gradient.iter())
+        {
+            assert_abs_diff_eq!(*actual, *expected, epsilon = 1e-6);
+        }
     }
 
     #[test]

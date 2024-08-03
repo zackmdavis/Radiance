@@ -6,7 +6,9 @@ use ndarray::prelude::*;
 use ndarray_rand::rand_distr::Normal;
 use ndarray_rand::RandomExt;
 
-use super::operations::{Mask, MatrixMultiplication, Multiplication, Operation, Softmax};
+use super::operations::{
+    Mask, MatrixMultiplication, Multiplication, Operation, Softmax, Transpose,
+};
 use super::{Origin, Tensor, TensorBuilder};
 
 pub struct AttentionHead {
@@ -104,7 +106,7 @@ impl AttentionHead {
         let k = MatrixMultiplication {}.forward(vec![x.clone(), self.key_weights.clone()]);
         let v = MatrixMultiplication {}.forward(vec![x.clone(), self.value_weights.clone()]);
 
-        let k_t = /* Transpose.forward(vec![k]); */ k; // TODO: need to write `Transpose` operation
+        let k_t = Transpose {}.forward(vec![k]);
         let qk_t = MatrixMultiplication {}.forward(vec![q, k_t]);
         let scale_factor = 1. / (self.attention_dimensionality() as f32).sqrt();
         let scale =
