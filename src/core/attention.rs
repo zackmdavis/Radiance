@@ -7,7 +7,7 @@ use ndarray_rand::rand_distr::Normal;
 use ndarray_rand::RandomExt;
 
 use super::operations::{
-    Mask, MatrixMultiplication, Multiplication, Operation, Softmax, Transpose,
+    Mask, MatrixMultiplication, Multiplication, Operation, SoftmaxRows, Transpose,
 };
 use super::{Origin, Tensor, TensorBuilder};
 
@@ -114,8 +114,7 @@ impl AttentionHead {
         let scaled_qk_t = Multiplication {}.forward(vec![scale, qk_t]);
         let mask = Rc::new(TensorBuilder::new(Array::ones((n, n)).tril(0).into_dyn()).build());
         let masked = Mask {}.forward(vec![scaled_qk_t, mask]);
-        // TODO: this probably needs to be SoftmaxRows?
-        let softmaxed = Softmax {}.forward(vec![masked]);
+        let softmaxed = SoftmaxRows {}.forward(vec![masked]);
         let h = MatrixMultiplication {}.forward(vec![softmaxed, v]);
         h
     }

@@ -323,6 +323,14 @@ fn softmax(x: Array1<f32>) -> Array1<f32> {
     softmaxed
 }
 
+fn δ(i: usize, j: usize) -> f32 {
+    if i == j {
+        1.
+    } else {
+        0.
+    }
+}
+
 pub(super) struct Softmax {}
 
 impl Operation for Softmax {
@@ -366,13 +374,6 @@ impl Operation for Softmax {
             .into_dimensionality::<Ix1>()
             .expect("one-dimensional");
         let n = softmaxed.len();
-        let δ = |i, j| {
-            if i == j {
-                1.
-            } else {
-                0.
-            }
-        };
         // The entries of the derivative matrix dS_i/dx_j are
         //
         // softmax(x)_i ·(δ_ij − softmax(x)_j)
@@ -383,6 +384,89 @@ impl Operation for Softmax {
         // So the product dS_i/dx_j · dL/dS_i = dL/dx_j tells
         // us how loss varies with the inputs.
         d.dot(&out_gradient).into_dyn()
+    }
+}
+
+pub(super) struct SoftmaxRows {}
+
+impl Operation for SoftmaxRows {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 1, "unary operation expected");
+        let x = inputs[0]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let mut softmaxed = Array2::zeros((0, x.shape()[1]));
+        for row in x.rows() {
+            let softmaxed_row = softmax(row.to_owned());
+            softmaxed
+                .push_row((&softmaxed_row).into())
+                .expect("row should fit");
+        }
+        let origin = Origin {
+            operation: Box::new(SoftmaxRows {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(
+            TensorBuilder::new(softmaxed.into_dyn())
+                .origin(origin)
+                .build(),
+        )
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        let x = args[0]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        // XXX: redoing the forward fn inside of the backward fn has dubious
+        // performance implications
+        let mut softmaxed = Array2::zeros((0, x.shape()[1]));
+        for row in x.rows() {
+            let softmaxed_row = softmax(row.to_owned());
+            softmaxed
+                .push_row((&softmaxed_row).into())
+                .expect("row should fit");
+        }
+
+        let out_gradient = out_gradient
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+
+        let n = softmaxed.shape()[1];
+
+        // As with softmax, forming the derivative matrix dS_i/dx_j =
+        // softmax(x)_i ·(δ_ij − softmax(x)_j) and multiplying it with the
+        // out-gradient ... but row by row.
+
+        let mut gradient = Array2::zeros((0, n));
+        for i in 0..softmaxed.shape()[0] {
+            // You'd expect this to be `for (softmaxed_row, out_gradient_row) in
+            // softmaxed.rows().zip(out_gradient.rows())`, but the iterator trait
+            // bound is missing, so, fine, we'll index
+            let softmaxed_row = softmaxed.row(i);
+            let out_gradient_row = out_gradient.row(i);
+
+            let d = Array2::from_shape_fn((n, n), |(i, j)| {
+                softmaxed_row[i] * (δ(i, j) - softmaxed_row[j])
+            });
+            let gradient_row = d.dot(&out_gradient_row);
+            gradient
+                .push_row((&gradient_row).into())
+                .expect("row should fit");
+        }
+
+        gradient.into_dyn()
     }
 }
 
@@ -982,6 +1066,69 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_softmax_rows() {
+        // Test written by Claude Sonnet 3.5, with human feedback and edits
+
+        // Create an input tensor with multiple rows
+        let input = Rc::new(
+            TensorBuilder::new(array![[2.0, 1.0, 0.1], [1.0, 2.0, 3.0]].into_dyn())
+                .identifier("input".to_string())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let softmax_rows = SoftmaxRows {};
+
+        // Test forward pass
+        let result = softmax_rows.forward(vec![input.clone()]);
+
+        let expected_output = array![[0.6590, 0.2424, 0.0986], [0.0900, 0.2447, 0.6652]];
+
+        assert_eq!(result.array.borrow().shape(), &[2, 3]);
+        for (actual_row, expected_row) in result
+            .array
+            .borrow()
+            .rows()
+            .into_iter()
+            .zip(expected_output.rows())
+        {
+            for (&actual, &expected) in actual_row.iter().zip(expected_row.iter()) {
+                assert_abs_diff_eq!(actual, expected, epsilon = 0.0001);
+            }
+        }
+
+        // Test backward pass
+        // Using extreme values to get a stronger signal
+        let out_gradient = array![[10000.0, 1000.0, 1.0], [1.0, 100.0, 10000.0]].into_dyn();
+
+        // Directly call backward
+        let input_gradient = softmax_rows.backward(&out_gradient, vec![input.clone()], 0);
+
+        // from PyTorch—
+        //
+        // import torch
+        // activation = torch.nn.Softmax(dim=1)
+        // x = torch.tensor([[2.0, 1.0, 0.1], [1.0, 2.0, 3.0]], requires_grad=True)
+        // output = activation(x)
+        // output.backward(gradient=torch.tensor([[10000.0, 1000.0, 1.0], [1.0, 100.0, 10000.0]]))
+        // x.grad
+        let expected_gradient = array![
+            [2087.3577, -1414.0009, -673.3572],
+            [-601.0416, -1609.5725, 2210.6138]
+        ];
+
+        assert_eq!(input_gradient.shape(), &[2, 3]);
+        for (actual_row, expected_row) in input_gradient
+            .rows()
+            .into_iter()
+            .zip(expected_gradient.rows())
+        {
+            for (&actual, &expected) in actual_row.iter().zip(expected_row.iter()) {
+                assert_abs_diff_eq!(actual, expected, epsilon = 0.001);
+            }
+        }
+    }
     #[test]
     fn test_mask() {
         // Test written by Claude Sonnet 3.5
