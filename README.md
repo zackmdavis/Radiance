@@ -6,8 +6,9 @@ Radiance is an educational neural networks library and autodifferentiation frame
 
 ### big
 
- * build scaled dot-product attention from MatrixMultiplication, Multiplication, Mask, Softmax Operations??
-   * https://paperswithcode.com/method/scaled
+ * positional embedding
+ * figure out how to test AttentionHead
+ * multi-attention-head
 
 #### small
 
