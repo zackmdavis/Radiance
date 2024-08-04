@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use ndarray;
 use ndarray::prelude::*;
 
 use super::{Origin, Tensor, TensorBuilder};
@@ -271,6 +272,42 @@ impl Operation for Transpose {
         _arg_index: usize,
     ) -> ArrayD<f32> {
         out_gradient.t().to_owned()
+    }
+}
+
+pub(super) struct Concatenate {}
+
+impl Operation for Concatenate {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        let arrays = inputs
+            .iter()
+            .map(|t| t.array.borrow().clone())
+            .collect::<Vec<_>>();
+        let array_views = arrays.iter().map(|a| a.view()).collect::<Vec<_>>();
+        let catted =
+            ndarray::concatenate(Axis(1), array_views.as_slice()).expect("shapes should cat");
+        let origin = Origin {
+            operation: Box::new(Concatenate {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(TensorBuilder::new(catted.into_dyn()).origin(origin).build())
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        arg_index: usize,
+    ) -> ArrayD<f32> {
+        let widths = args
+            .iter()
+            .map(|t| t.array.borrow().shape()[1])
+            .collect::<Vec<_>>();
+        let columns_before: usize = widths[..arg_index].iter().sum();
+        out_gradient
+            .slice(s![.., columns_before..columns_before + widths[arg_index]])
+            .to_owned()
+            .into_dyn()
     }
 }
 
@@ -931,6 +968,42 @@ mod tests {
         {
             assert_abs_diff_eq!(*actual, *expected, epsilon = 1e-6);
         }
+    }
+
+    #[test]
+    fn test_concatenate() {
+        // artisanally human-written, real vintage 2019 stuff here
+        let a = array![[1., 2.], [3., 4.]];
+        let b = array![[4., 5.], [6., 7.]];
+        let ta = Rc::new(
+            TensorBuilder::new(a.into_dyn())
+                .requires_gradient(true)
+                .build(),
+        );
+        let tb = Rc::new(
+            TensorBuilder::new(b.into_dyn())
+                .requires_gradient(true)
+                .build(),
+        );
+        let result = Concatenate {}.forward(vec![ta, tb]);
+        let result_array = result.array.borrow();
+        assert_eq!(
+            *result_array,
+            array![[1.0, 2.0, 4.0, 5.0], [3.0, 4.0, 6.0, 7.0]].into_dyn()
+        );
+        let out_gradient = array![[1., 2., 3., 4.], [5., 6., 7., 8.]].into_dyn();
+        let back_0 = Concatenate {}.backward(
+            &out_gradient,
+            result.origin.as_ref().unwrap().parents.clone(),
+            0,
+        );
+        let back_1 = Concatenate {}.backward(
+            &out_gradient,
+            result.origin.as_ref().unwrap().parents.clone(),
+            1,
+        );
+        assert_eq!(back_0, array![[1., 2.], [5., 6.]].into_dyn());
+        assert_eq!(back_1, array![[3., 4.], [7., 8.]].into_dyn());
     }
 
     #[test]
