@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{RefCell, Ref};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -63,7 +63,11 @@ impl PartialEq for Tensor {
 impl Eq for Tensor {}
 
 impl Tensor {
-    fn unset_gradient(&self) {
+    pub fn borrow_array(&self) -> Ref<ArrayD<f32>> {
+        self.array.borrow()
+    }
+
+    pub fn unset_gradient(&self) {
         *self.gradient.borrow_mut() = None
     }
 }

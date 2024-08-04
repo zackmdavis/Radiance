@@ -183,7 +183,7 @@ impl AttentionMultiHead {
     }
 }
 
-struct AttentionLayer {
+pub struct AttentionLayer {
     identifier: String,
     attention_multihead: AttentionMultiHead,
     multi_layer_perceptron: MultiLayerPerceptron,

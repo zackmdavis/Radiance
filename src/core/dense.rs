@@ -11,7 +11,7 @@ use crate::core::operations::{
     Addition, LeakyRectifiedLinearUnit, MatrixMultiplication, Operation,
 };
 
-pub(super) struct Linear {
+pub struct Linear {
     #[allow(dead_code)]
     identifier: String,
     // TODO: `pub` is dubious, but needed for the demo to still work
@@ -87,7 +87,7 @@ impl Linear {
     }
 }
 
-pub(super) struct MultiLayerPerceptron {
+pub struct MultiLayerPerceptron {
     identifier: String,
     layers: Vec<Linear>,
 }

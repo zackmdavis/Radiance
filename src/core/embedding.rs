@@ -4,7 +4,7 @@ use ndarray::prelude::*;
 use ndarray_rand::rand_distr::StandardNormal;
 use ndarray_rand::RandomExt;
 
-use super::operations::Operation;
+use super::operations::{Operation, MatrixMultiplication, Transpose};
 use super::{Origin, Tensor, TensorBuilder};
 
 #[allow(dead_code)]
@@ -27,7 +27,7 @@ fn single_positional_encoding(position: usize, embedding_dimensionality: usize) 
 }
 
 #[allow(dead_code)]
-fn sequence_positional_encoding(length: usize, embedding_dimensionality: usize) -> Rc<Tensor> {
+pub fn sequence_positional_encoding(length: usize, embedding_dimensionality: usize) -> Rc<Tensor> {
     let mut position_embedding = Array2::zeros((0, embedding_dimensionality));
     for position in 0..length {
         position_embedding
@@ -74,12 +74,21 @@ impl TokenEmbedding {
         }
     }
 
+    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
+        vec![self.weights.clone()]
+    }
+
     pub fn dimensionality(&self) -> usize {
         self.weights.array.borrow().shape()[1]
     }
 
-    pub fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
+    pub fn embed(&self, input: Rc<Tensor>) -> Rc<Tensor> {
         Lookup {}.forward(vec![self.weights.clone(), input])
+    }
+
+    pub fn unembed(&self, x: Rc<Tensor>) -> Rc<Tensor> {
+        let u = Transpose {}.forward(vec![self.weights.clone()]);
+        MatrixMultiplication {}.forward(vec![x, u])
     }
 }
 
@@ -170,7 +179,7 @@ mod tests {
         let sequence_tensor = Rc::new(TensorBuilder::new(sequence.into_dyn()).build());
 
         // Perform the forward pass using TokenEmbedding's forward method
-        let output = embedding.forward(sequence_tensor.clone());
+        let output = embedding.embed(sequence_tensor.clone());
 
         // Check the output shape
         assert_eq!(output.array.borrow().shape(), &[6, 3]);

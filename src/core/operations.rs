@@ -5,9 +5,9 @@ use ndarray::prelude::*;
 
 use super::{Origin, Tensor, TensorBuilder};
 
-pub(super) struct Addition {}
+pub struct Addition {}
 
-pub(super) trait Operation {
+pub trait Operation {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor>;
     fn backward(
         &self,
@@ -41,7 +41,7 @@ impl Operation for Addition {
     }
 }
 
-pub(super) struct Multiplication {}
+pub struct Multiplication {}
 
 impl Operation for Multiplication {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -69,7 +69,7 @@ impl Operation for Multiplication {
     }
 }
 
-pub(super) struct MatrixMultiplication {}
+pub struct MatrixMultiplication {}
 
 impl Operation for MatrixMultiplication {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -132,7 +132,7 @@ impl Operation for MatrixMultiplication {
     }
 }
 
-pub(super) struct RectifiedLinearUnit {}
+pub struct RectifiedLinearUnit {}
 
 impl Operation for RectifiedLinearUnit {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -160,7 +160,7 @@ impl Operation for RectifiedLinearUnit {
     }
 }
 
-pub(super) struct LeakyRectifiedLinearUnit {
+pub struct LeakyRectifiedLinearUnit {
     leak: f32,
 }
 
@@ -203,7 +203,7 @@ impl Operation for LeakyRectifiedLinearUnit {
     }
 }
 
-pub(super) struct Reshape {
+pub struct Reshape {
     new_shape: Vec<usize>,
 }
 
@@ -245,7 +245,7 @@ impl Operation for Reshape {
     }
 }
 
-pub(super) struct Transpose {}
+pub struct Transpose {}
 
 impl Operation for Transpose {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -272,7 +272,7 @@ impl Operation for Transpose {
     }
 }
 
-pub(super) struct Concatenate {}
+pub struct Concatenate {}
 
 impl Operation for Concatenate {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -308,7 +308,7 @@ impl Operation for Concatenate {
     }
 }
 
-pub(super) struct SquaredError {}
+pub struct SquaredError {}
 
 impl Operation for SquaredError {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -365,7 +365,7 @@ fn δ(i: usize, j: usize) -> f32 {
     }
 }
 
-pub(super) struct Softmax {}
+pub struct Softmax {}
 
 impl Operation for Softmax {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -421,7 +421,7 @@ impl Operation for Softmax {
     }
 }
 
-pub(super) struct SoftmaxRows {}
+pub struct SoftmaxRows {}
 
 impl Operation for SoftmaxRows {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -504,7 +504,7 @@ impl Operation for SoftmaxRows {
     }
 }
 
-pub(super) struct SoftmaxCrossEntropy {}
+pub struct SoftmaxCrossEntropy {}
 
 impl Operation for SoftmaxCrossEntropy {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
@@ -580,7 +580,7 @@ impl Operation for SoftmaxCrossEntropy {
     }
 }
 
-pub(super) struct Mask {}
+pub struct Mask {}
 
 impl Operation for Mask {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
