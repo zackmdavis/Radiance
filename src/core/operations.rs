@@ -251,9 +251,6 @@ impl Operation for Transpose {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
         assert!(inputs.len() == 1, "unary operation expected");
         let array = inputs[0].array.borrow().clone();
-        // .clone()
-        // .into_dimensionality::<Ix2>()
-        // .expect("two-dimensional");
         let origin = Origin {
             operation: Box::new(Transpose {}),
             parents: inputs.clone(),
@@ -482,7 +479,7 @@ impl Operation for SoftmaxRows {
 
         let n = softmaxed.shape()[1];
 
-        // As with softmax, forming the derivative matrix dS_i/dx_j =
+        // As with `Softmax`, forming the derivative matrix dS_i/dx_j =
         // softmax(x)_i ·(δ_ij − softmax(x)_j) and multiplying it with the
         // out-gradient ... but row by row.
 
