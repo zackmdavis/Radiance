@@ -12,7 +12,6 @@ Radiance is an educational neural networks library and autodifferentiation frame
 #### small
 
  * address TensorBuilder identifier infelicity
- * address `requires_gradient` dubious default infelicity
  * address input _vs._ args inconsistent naming infelicity
  * ignored arguments in backward pass are sketchy
  * numerically stabler softmax

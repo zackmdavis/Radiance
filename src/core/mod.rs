@@ -82,7 +82,7 @@ impl TensorBuilder {
         TensorBuilder {
             array,
             identifier: None,
-            requires_gradient: true, // shouldn't this be false?
+            requires_gradient: false,
             gradient: RefCell::new(None),
             origin: None,
         }
