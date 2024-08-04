@@ -87,9 +87,8 @@ impl TensorBuilder {
         }
     }
 
-    // TODO (small): should this take a &str?
-    pub fn identifier(mut self, identifier: String) -> TensorBuilder {
-        self.identifier = Some(identifier);
+    pub fn identifier(mut self, identifier: &str) -> TensorBuilder {
+        self.identifier = Some(identifier.to_owned());
         self
     }
 
@@ -207,19 +206,19 @@ mod tests {
         // Test written by Claude 3.5 Sonnet
         let a = Rc::new(
             TensorBuilder::new(array![2.0].into_dyn())
-                .identifier("a".to_string())
+                .identifier("a")
                 .requires_gradient(true)
                 .build(),
         );
         let b = Rc::new(
             TensorBuilder::new(array![3.0].into_dyn())
-                .identifier("b".to_string())
+                .identifier("b")
                 .requires_gradient(true)
                 .build(),
         );
         let c = Rc::new(
             TensorBuilder::new(array![4.0].into_dyn())
-                .identifier("c".to_string())
+                .identifier("c")
                 .requires_gradient(true)
                 .build(),
         );
@@ -248,13 +247,13 @@ mod tests {
         // Test written by Claude 3.5 Sonnet
         let a = Rc::new(
             TensorBuilder::new(array![2.0].into_dyn())
-                .identifier("a".to_string())
+                .identifier("a")
                 .requires_gradient(true)
                 .build(),
         );
         let b = Rc::new(
             TensorBuilder::new(array![3.0].into_dyn())
-                .identifier("b".to_string())
+                .identifier("b")
                 .requires_gradient(true)
                 .build(),
         );

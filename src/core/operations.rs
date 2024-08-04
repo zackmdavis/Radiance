@@ -709,13 +709,11 @@ mod tests {
         // Test written by Claude 3.5 Sonnet
         let a = Rc::new(
             TensorBuilder::new(array![[1., 2.], [3., 4.]].into_dyn())
-                .identifier("a".to_string())
                 .requires_gradient(true)
                 .build(),
         );
         let b = Rc::new(
             TensorBuilder::new(array![[5., 6.], [7., 8.]].into_dyn())
-                .identifier("b".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -759,13 +757,11 @@ mod tests {
         // Test mostly written by Claude 3.5 Sonnet (expectations revised against PyTorch)
         let a = Rc::new(
             TensorBuilder::new(array![[1., 2., 3.], [4., 5., 6.]].into_dyn())
-                .identifier("a".to_string())
                 .requires_gradient(true)
                 .build(),
         );
         let b = Rc::new(
             TensorBuilder::new(array![[7., 8.], [9., 10.], [11., 12.]].into_dyn())
-                .identifier("b".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -799,7 +795,6 @@ mod tests {
         // Test written by Claude 3.5 Sonnet
         let input = Rc::new(
             TensorBuilder::new(array![-2.0, -1.0, 0.0, 1.0, 2.0].into_dyn())
-                .identifier("input".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -826,7 +821,6 @@ mod tests {
         // Additional test with different input
         let input2 = Rc::new(
             TensorBuilder::new(array![-1.0, 0.0, 1.0, 2.0, 3.0].into_dyn())
-                .identifier("input2".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -847,7 +841,6 @@ mod tests {
         // Test case 1: Standard input
         let input = Rc::new(
             TensorBuilder::new(array![-2.0, -1.0, 0.0, 1.0, 2.0].into_dyn())
-                .identifier("input".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -873,7 +866,6 @@ mod tests {
         // Test case 2: Different input
         let input2 = Rc::new(
             TensorBuilder::new(array![-1.0, 0.0, 1.0, 2.0, 3.0].into_dyn())
-                .identifier("input2".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -888,7 +880,6 @@ mod tests {
         // Test case 3: Edge cases
         let input3 = Rc::new(
             TensorBuilder::new(array![-0.001, 0.001, 1e-8, -1e-8].into_dyn())
-                .identifier("input3".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -904,7 +895,6 @@ mod tests {
         let lrelu2 = LeakyRectifiedLinearUnit::new(0.1);
         let input4 = Rc::new(
             TensorBuilder::new(array![-1.0, 1.0].into_dyn())
-                .identifier("input4".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -921,7 +911,6 @@ mod tests {
         // Create a 2x3 input matrix
         let input = Rc::new(
             TensorBuilder::new(array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]].into_dyn())
-                .identifier("input".to_string())
                 .requires_gradient(true)
                 .build(),
         );
@@ -941,7 +930,6 @@ mod tests {
         // not just if the shape is correct
         let out_gradient = Rc::new(
             TensorBuilder::new(array![[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]].into_dyn())
-                .identifier("out_gradient".to_string())
                 .requires_gradient(false)
                 .build(),
         );
@@ -1008,13 +996,13 @@ mod tests {
         // Test written by Claude Sonnet 3.5
         let prediction = Rc::new(
             TensorBuilder::new(array![0.7].into_dyn())
-                .identifier("prediction".to_string())
+                .identifier("prediction")
                 .requires_gradient(true)
                 .build(),
         );
         let target = Rc::new(
             TensorBuilder::new(array![1.0].into_dyn())
-                .identifier("target".to_string())
+                .identifier("target")
                 .requires_gradient(true)
                 .build(),
         );
@@ -1043,7 +1031,7 @@ mod tests {
         // Create a prediction tensor (logits)
         let prediction = Rc::new(
             TensorBuilder::new(array![2.0, 1.0, 0.1].into_dyn())
-                .identifier("prediction".to_string())
+                .identifier("prediction")
                 .requires_gradient(true)
                 .build(),
         );
@@ -1051,7 +1039,7 @@ mod tests {
         // Create a target tensor (true probabilities)
         let target = Rc::new(
             TensorBuilder::new(array![1.0, 0.0, 0.0].into_dyn())
-                .identifier("target".to_string())
+                .identifier("target")
                 .requires_gradient(false)
                 .build(),
         );
@@ -1098,7 +1086,7 @@ mod tests {
         // Create an input tensor
         let input = Rc::new(
             TensorBuilder::new(array![2.0, 1.0, 0.1].into_dyn())
-                .identifier("input".to_string())
+                .identifier("input")
                 .requires_gradient(true)
                 .build(),
         );
@@ -1143,7 +1131,7 @@ mod tests {
         // Create an input tensor with multiple rows
         let input = Rc::new(
             TensorBuilder::new(array![[2.0, 1.0, 0.1], [1.0, 2.0, 3.0]].into_dyn())
-                .identifier("input".to_string())
+                .identifier("input")
                 .requires_gradient(true)
                 .build(),
         );
@@ -1205,7 +1193,7 @@ mod tests {
 
         let input = Rc::new(
             TensorBuilder::new(array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]].into_dyn())
-                .identifier("input".to_string())
+                .identifier("input")
                 .requires_gradient(true)
                 .build(),
         );
@@ -1213,7 +1201,7 @@ mod tests {
         // Create a mask tensor
         let mask = Rc::new(
             TensorBuilder::new(array![[1.0, 1.0, 0.0], [1.0, 0.0, 1.0]].into_dyn())
-                .identifier("mask".to_string())
+                .identifier("mask")
                 .requires_gradient(false)
                 .build(),
         );

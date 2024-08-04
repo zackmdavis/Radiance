@@ -33,13 +33,13 @@ impl Linear {
             weights: Rc::new(
                 TensorBuilder::new(weights)
                     .requires_gradient(true)
-                    .identifier(format!("{}_weights", identifier))
+                    .identifier(&format!("{}_weights", identifier))
                     .build(),
             ),
             biases: Rc::new(
                 TensorBuilder::new(biases)
                     .requires_gradient(true)
-                    .identifier(format!("{}_biases", identifier))
+                    .identifier(&format!("{}_biases", identifier))
                     .build(),
             ),
         }
@@ -152,7 +152,7 @@ mod tests {
         let input = Rc::new(
             TensorBuilder::new(input_data)
                 .requires_gradient(true)
-                .identifier("input".to_owned())
+                .identifier("input")
                 .build(),
         );
 

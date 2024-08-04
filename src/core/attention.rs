@@ -36,6 +36,7 @@ impl AttentionHead {
                 )
                 .into_dyn(),
             )
+            .identifier(&format!("{}_query_weights", identifier))
             .requires_gradient(true)
             .build(),
         );
@@ -54,6 +55,7 @@ impl AttentionHead {
                 )
                 .into_dyn(),
             )
+            .identifier(&format!("{}_key_weights", identifier))
             .requires_gradient(true)
             .build(),
         );
@@ -65,6 +67,7 @@ impl AttentionHead {
                 )
                 .into_dyn(),
             )
+            .identifier(&format!("{}_value_weights", identifier))
             .requires_gradient(true)
             .build(),
         );
@@ -147,6 +150,7 @@ impl AttentionMultiHead {
                 )
                 .into_dyn(),
             )
+            .identifier(&format!("{}_output_weights", identifier))
             .requires_gradient(true)
             .build(),
         );

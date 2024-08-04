@@ -42,7 +42,7 @@ fn sequence_positional_encoding(length: usize, embedding_dimensionality: usize) 
     }
     Rc::new(
         TensorBuilder::new(position_embedding.into_dyn())
-            .identifier(format!("positional_embedding_{}", embedding_dimensionality))
+            .identifier(&format!("positional_embedding_{}", embedding_dimensionality))
             .requires_gradient(false)
             .build(),
     )
@@ -68,7 +68,7 @@ impl TokenEmbedding {
             weights: Rc::new(
                 TensorBuilder::new(weights)
                     .requires_gradient(true)
-                    .identifier(format!("{}_weights", identifier))
+                    .identifier(&format!("{}_weights", identifier))
                     .build(),
             ),
         }
