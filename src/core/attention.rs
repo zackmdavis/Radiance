@@ -7,7 +7,7 @@ use ndarray_rand::rand_distr::Normal;
 use ndarray_rand::RandomExt;
 
 use super::operations::{
-    Mask, MatrixMultiplication, Multiplication, Operation, SoftmaxRows, Transpose,
+    Concatenate, Mask, MatrixMultiplication, Multiplication, Operation, SoftmaxRows, Transpose,
 };
 use super::{Origin, Tensor, TensorBuilder};
 
@@ -130,9 +130,46 @@ impl AttentionHead {
 }
 
 pub struct AttentionMultiHead {
+    identifier: String,
     heads: Vec<AttentionHead>,
     output_weights: Rc<Tensor>,
     // TODO: MLP
+}
+
+impl AttentionMultiHead {
+    pub fn new(identifier: &str, heads: Vec<AttentionHead>) -> Self {
+        let output_weights = Rc::new(
+            TensorBuilder::new(
+                Array::random(
+                    (
+                        heads.len() * heads[0].attention_dimensionality(),
+                        heads[0].embedding_dimensionality(),
+                    ),
+                    Normal::new(0., 0.02).unwrap(),
+                )
+                .into_dyn(),
+            )
+            .requires_gradient(true)
+            .build(),
+        );
+        Self {
+            identifier: identifier.to_owned(),
+            heads,
+            output_weights,
+        }
+    }
+}
+
+impl AttentionMultiHead {
+    pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
+        let hs = self
+            .heads
+            .iter()
+            .map(|head| head.forward(x.clone()))
+            .collect::<Vec<_>>();
+        let h = Concatenate {}.forward(hs);
+        MatrixMultiplication {}.forward(vec![h, self.output_weights.clone()])
+    }
 }
 
 #[cfg(test)]
@@ -140,7 +177,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_dimensionalities() {
+    fn test_head_dimensionalities() {
         let head = AttentionHead::new("my_first_attention_head", 64, 16);
         assert_eq!(head.embedding_dimensionality(), 64);
         assert_eq!(head.attention_dimensionality(), 16);
@@ -221,5 +258,25 @@ mod tests {
         let second_token_output_1 = output_1.slice(s![1, ..]);
         let second_token_output_2 = output_2.slice(s![1, ..]);
         assert_ne!(second_token_output_1, second_token_output_2);
+    }
+
+    #[test]
+    fn test_multihead_dimensionalities() {
+        let mut heads = Vec::new();
+        for i in 0..4 {
+            heads.push(AttentionHead::new(&format!("attention_head{}", i), 64, 16));
+        }
+        let multihead = AttentionMultiHead::new("my_first_attention_multihead", heads);
+        assert_eq!(multihead.output_weights.array.borrow().shape(), &[64, 64]);
+        let x = Rc::new(
+            TensorBuilder::new(
+                Array::from_shape_vec((2, 64), vec![0.5; 128])
+                    .expect("array should build")
+                    .into_dyn(),
+            )
+            .build(),
+        );
+        let y = multihead.forward(x);
+        assert_eq!(y.array.borrow().shape(), &[2, 64]);
     }
 }
