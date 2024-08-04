@@ -87,13 +87,13 @@ impl Linear {
     }
 }
 
-struct MultiLayerPerceptron {
+pub(super) struct MultiLayerPerceptron {
     identifier: String,
     layers: Vec<Linear>,
 }
 
 impl MultiLayerPerceptron {
-    fn new(identifier: &str, layer_dimensionalities: Vec<usize>) -> Self {
+    pub fn new(identifier: &str, layer_dimensionalities: Vec<usize>) -> Self {
         let mut layers = Vec::new();
         for (i, window) in layer_dimensionalities.windows(2).enumerate() {
             let &[in_dimensionality, out_dimensionality] = window else {
@@ -111,7 +111,7 @@ impl MultiLayerPerceptron {
         }
     }
 
-    fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
+    pub fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
         let mut x = input;
         for (i, layer) in self.layers.iter().enumerate() {
             x = layer.forward(x);
@@ -122,7 +122,7 @@ impl MultiLayerPerceptron {
         x
     }
 
-    fn parameters(&self) -> Vec<Rc<Tensor>> {
+    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
         let mut parameters = Vec::new();
         for layer in &self.layers {
             parameters.push(layer.weights.clone());

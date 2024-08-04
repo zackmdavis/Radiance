@@ -6,8 +6,10 @@ use ndarray::prelude::*;
 use ndarray_rand::rand_distr::Normal;
 use ndarray_rand::RandomExt;
 
+use super::dense::MultiLayerPerceptron;
 use super::operations::{
-    Concatenate, Mask, MatrixMultiplication, Multiplication, Operation, SoftmaxRows, Transpose,
+    Addition, Concatenate, Mask, MatrixMultiplication, Multiplication, Operation, SoftmaxRows,
+    Transpose,
 };
 use super::{Origin, Tensor, TensorBuilder};
 
@@ -66,17 +68,6 @@ impl AttentionHead {
             .requires_gradient(true)
             .build(),
         );
-        let output_weights = Rc::new(
-            TensorBuilder::new(
-                Array::random(
-                    (attention_dimensionality, embedding_dimensionality),
-                    Normal::new(0., 0.02).unwrap(),
-                )
-                .into_dyn(),
-            )
-            .requires_gradient(true)
-            .build(),
-        );
         Self {
             identifier: identifier.to_owned(),
             query_weights,
@@ -94,6 +85,14 @@ impl AttentionHead {
 
     pub fn attention_dimensionality(&self) -> usize {
         self.key_weights.array.borrow().shape()[1]
+    }
+
+    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
+        vec![
+            self.query_weights.clone(),
+            self.key_weights.clone(),
+            self.value_weights.clone(),
+        ]
     }
 
     pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
@@ -133,7 +132,6 @@ pub struct AttentionMultiHead {
     identifier: String,
     heads: Vec<AttentionHead>,
     output_weights: Rc<Tensor>,
-    // TODO: MLP
 }
 
 impl AttentionMultiHead {
@@ -161,6 +159,15 @@ impl AttentionMultiHead {
 }
 
 impl AttentionMultiHead {
+    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
+        let mut parameters = Vec::new();
+        for head in &self.heads {
+            parameters.extend(head.parameters());
+        }
+        parameters.push(self.output_weights.clone());
+        parameters
+    }
+
     pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
         let hs = self
             .heads
@@ -169,6 +176,42 @@ impl AttentionMultiHead {
             .collect::<Vec<_>>();
         let h = Concatenate {}.forward(hs);
         MatrixMultiplication {}.forward(vec![h, self.output_weights.clone()])
+    }
+}
+
+struct AttentionLayer {
+    identifier: String,
+    attention_multihead: AttentionMultiHead,
+    multi_layer_perceptron: MultiLayerPerceptron,
+}
+
+impl AttentionLayer {
+    pub fn new(
+        identifier: &str,
+        attention_multihead: AttentionMultiHead,
+        multi_layer_perceptron: MultiLayerPerceptron,
+    ) -> Self {
+        Self {
+            identifier: identifier.to_owned(),
+            attention_multihead,
+            multi_layer_perceptron,
+        }
+    }
+
+    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
+        let mut parameters = Vec::new();
+        parameters.extend(self.attention_multihead.parameters());
+        parameters.extend(self.multi_layer_perceptron.parameters());
+        parameters
+    }
+
+    pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
+        // TODO: there are supposed to be LayerNorms here
+        let y = self.attention_multihead.forward(x.clone());
+        let z = Addition {}.forward(vec![y, x]); // residual connection—nice
+        let percepted = self.multi_layer_perceptron.forward(z.clone());
+        let attended = Addition {}.forward(vec![percepted, z]);
+        attended
     }
 }
 
