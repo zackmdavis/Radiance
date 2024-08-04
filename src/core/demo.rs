@@ -6,7 +6,8 @@ use rand::Rng;
 use ndarray::prelude::*;
 
 use super::operations::{LeakyRectifiedLinearUnit, Operation, Reshape, SquaredError};
-use super::{backprop, Linear, Tensor, TensorBuilder};
+use super::{backprop, Tensor, TensorBuilder};
+use crate::core::dense::Linear;
 
 use super::optimization::StochasticGradientDescentOptimizer;
 
