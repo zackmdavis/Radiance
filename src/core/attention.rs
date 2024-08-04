@@ -138,13 +138,27 @@ pub struct AttentionMultiHead {
 }
 
 impl AttentionMultiHead {
-    pub fn new(identifier: &str, heads: Vec<AttentionHead>) -> Self {
+    pub fn new(
+        identifier: &str,
+        head_count: usize,
+        embedding_dimensionality: usize,
+        attention_dimensionality: usize,
+    ) -> Self {
+        let mut heads = Vec::new();
+        for head_no in 0..head_count {
+            heads.push(AttentionHead::new(
+                &format!("{}_head_{}", identifier, head_no),
+                embedding_dimensionality,
+                attention_dimensionality,
+            ));
+        }
+
         let output_weights = Rc::new(
             TensorBuilder::new(
                 Array::random(
                     (
-                        heads.len() * heads[0].attention_dimensionality(),
-                        heads[0].embedding_dimensionality(),
+                        head_count * attention_dimensionality,
+                        embedding_dimensionality,
                     ),
                     Normal::new(0., 0.02).unwrap(),
                 )
@@ -192,9 +206,20 @@ pub struct AttentionLayer {
 impl AttentionLayer {
     pub fn new(
         identifier: &str,
-        attention_multihead: AttentionMultiHead,
-        multi_layer_perceptron: MultiLayerPerceptron,
+        head_count: usize,
+        embedding_dimensionality: usize,
+        attention_dimensionality: usize,
     ) -> Self {
+        let attention_multihead = AttentionMultiHead::new(
+            identifier,
+            head_count,
+            embedding_dimensionality,
+            attention_dimensionality,
+        );
+        let multi_layer_perceptron = MultiLayerPerceptron::new(
+            &format!("{}_mlp", identifier),
+            vec![embedding_dimensionality; 2],
+        );
         Self {
             identifier: identifier.to_owned(),
             attention_multihead,
@@ -309,11 +334,7 @@ mod tests {
 
     #[test]
     fn test_multihead_dimensionalities() {
-        let mut heads = Vec::new();
-        for i in 0..4 {
-            heads.push(AttentionHead::new(&format!("attention_head{}", i), 64, 16));
-        }
-        let multihead = AttentionMultiHead::new("my_first_attention_multihead", heads);
+        let multihead = AttentionMultiHead::new("my_first_attention_multihead", 4, 64, 16);
         assert_eq!(multihead.output_weights.array.borrow().shape(), &[64, 64]);
         let x = Rc::new(
             TensorBuilder::new(

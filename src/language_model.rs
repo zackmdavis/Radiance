@@ -14,6 +14,34 @@ pub struct SmallLanguageModel {
 }
 
 impl SmallLanguageModel {
+    pub fn new(
+        identifier: &str,
+        vocabulary_size: usize,
+        embedding_dimensionality: usize,
+        attention_dimensionality: usize,
+        head_count: usize,
+        layer_count: usize,
+    ) -> Self {
+        let token_embedding = TokenEmbedding::new(
+            &format!("{}_token_embedding", identifier),
+            vocabulary_size,
+            embedding_dimensionality,
+        );
+        let mut attention_layers = Vec::new();
+        for layer_no in 0..layer_count {
+            attention_layers.push(AttentionLayer::new(
+                &format!("{}_attention_layer_{}", identifier, layer_no),
+                head_count,
+                embedding_dimensionality,
+                attention_dimensionality,
+            ));
+        }
+        Self {
+            token_embedding,
+            attention_layers,
+        }
+    }
+
     pub fn parameters(&self) -> Vec<Rc<Tensor>> {
         let mut parameters = Vec::new();
         parameters.extend(self.token_embedding.parameters());
