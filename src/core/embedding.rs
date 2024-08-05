@@ -1,11 +1,59 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use ndarray::prelude::*;
 use ndarray_rand::rand_distr::StandardNormal;
 use ndarray_rand::RandomExt;
 
-use super::operations::{Operation, MatrixMultiplication, Transpose};
+use super::operations::{MatrixMultiplication, Operation, Transpose};
 use super::{Origin, Tensor, TensorBuilder};
+
+pub struct TokenVocabulary {
+    token_to_id: HashMap<char, u8>,
+    #[allow(dead_code)]
+    id_to_token: HashMap<u8, char>,
+}
+
+impl TokenVocabulary {
+    pub fn new(tokens: Vec<char>) -> Self {
+        let mut token_to_id = HashMap::new();
+        let mut id_to_token = HashMap::new();
+        for (i, token) in tokens.iter().enumerate() {
+            id_to_token.insert(i as u8, *token);
+            token_to_id.insert(*token, i as u8);
+        }
+        TokenVocabulary {
+            token_to_id,
+            id_to_token,
+        }
+    }
+
+    pub fn tokenize(&self, text: String) -> Vec<f32> {
+        let mut token_ids = Vec::new();
+        for c in text.chars() {
+            match self.token_to_id.get(&c) {
+                Some(id) => token_ids.push(*id as u8 as f32),
+                None => {}
+            }
+        }
+        token_ids
+    }
+}
+
+impl Default for TokenVocabulary {
+    fn default() -> Self {
+        let standard_vocabulary = vec![
+            '▶', // start of sequence
+            '\n', ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?', '@',
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
+            'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_', '`', 'a', 'b',
+            'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
+            't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '—',
+        ];
+        Self::new(standard_vocabulary)
+    }
+}
 
 #[allow(dead_code)]
 fn single_positional_encoding(position: usize, embedding_dimensionality: usize) -> Vec<f32> {
@@ -42,7 +90,10 @@ pub fn sequence_positional_encoding(length: usize, embedding_dimensionality: usi
     }
     Rc::new(
         TensorBuilder::new(position_embedding.into_dyn())
-            .identifier(&format!("positional_embedding_{}", embedding_dimensionality))
+            .identifier(&format!(
+                "positional_embedding_{}",
+                embedding_dimensionality
+            ))
             .requires_gradient(false)
             .build(),
     )

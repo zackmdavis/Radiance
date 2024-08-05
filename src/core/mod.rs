@@ -1,4 +1,4 @@
-use std::cell::{RefCell, Ref};
+use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -63,6 +63,10 @@ impl PartialEq for Tensor {
 impl Eq for Tensor {}
 
 impl Tensor {
+    pub fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
     pub fn borrow_array(&self) -> Ref<ArrayD<f32>> {
         self.array.borrow()
     }
@@ -198,7 +202,6 @@ fn backprop(culmination: Rc<Tensor>) {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
