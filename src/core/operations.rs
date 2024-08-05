@@ -347,6 +347,7 @@ impl Operation for SquaredError {
     }
 }
 
+// TODO: should this take an ArrayView1?
 fn softmax(x: Array1<f32>) -> Array1<f32> {
     // TODO: shift the maximum element to zero for numerical stability?
     // https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
@@ -509,22 +510,32 @@ pub struct SoftmaxCrossEntropy {}
 impl Operation for SoftmaxCrossEntropy {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
         assert!(inputs.len() == 2, "binary operation expected");
-        let prediction = inputs[0]
+        // Shapes are (sequence_length, vocabulary_size)
+        let logits = inputs[0]
             .array
             .borrow()
             .clone()
-            .into_dimensionality::<Ix1>()
-            .expect("one-dimensional");
-        let target = inputs[1]
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let targets = inputs[1]
             .array
             .borrow()
             .clone()
-            .into_dimensionality::<Ix1>()
-            .expect("one-dimensional");
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
 
-        // − Σ_i y_i · log softmax(x)_i
-        let softmaxed = softmax(prediction);
-        let loss: f32 = target.iter().zip(softmaxed).map(|(t, s)| -t * s.ln()).sum();
+        let n = logits.shape()[0];
+
+        let mut loss: f32 = 0.;
+        for position in 0..n {
+            let prediction = softmax(logits.row(position).to_owned());
+            let target = targets.row(position);
+            loss += target
+                .iter()
+                .zip(prediction)
+                .map(|(t, p)| -t * p.ln())
+                .sum::<f32>();
+        }
 
         let origin = Origin {
             operation: Box::new(SoftmaxCrossEntropy {}),
@@ -546,19 +557,28 @@ impl Operation for SoftmaxCrossEntropy {
         assert!(args.len() == 2, "binary operation expected");
         // But we're ignoring `_arg_index` because we only care about the
         // gradient of the predictions.
-        let prediction = args[0]
+        let logits = args[0]
             .array
             .borrow()
             .clone()
-            .into_dimensionality::<Ix1>()
-            .expect("one-dimensional");
-        let target = args[1]
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let targets = args[1]
             .array
             .borrow()
             .clone()
-            .into_dimensionality::<Ix1>()
-            .expect("one-dimensional");
-        let softmaxed = softmax(prediction);
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+
+        // Is there a more functional-flavored way to do this? (see also SoftmaxRows)
+        let mut predictions = Array2::zeros((0, logits.shape()[1]));
+        for row in logits.rows() {
+            let prediction = softmax(row.to_owned());
+            predictions
+                .push_row((&prediction).into())
+                .expect("row should fit");
+        }
+
         // Loss is − Σ_i y_i · log softmax(x)_i
         // = − Σ_i y_i · log(exp(x_i)/Σ_j exp(x_j))
         // = − Σ_i y_i · (log(exp(x_i)) − log Σ_j exp(x_j))
@@ -570,13 +590,11 @@ impl Operation for SoftmaxCrossEntropy {
         // The fact that this turns out to be so tidy is the motivation for
         // combining a softmax activation with a cross entropy-loss as one
         // operation.
-        out_gradient
-            * target
-                .iter()
-                .zip(softmaxed)
-                .map(|(t, s)| s - t)
-                .collect::<Array1<f32>>()
-                .into_dyn()
+
+        let local_gradient = Array::from_shape_fn(logits.raw_dim(), |(i, j)| {
+            predictions[[i, j]] - targets[[i, j]]
+        });
+        (out_gradient * local_gradient).into_dyn()
     }
 }
 
@@ -1026,11 +1044,13 @@ mod tests {
 
     #[test]
     fn test_softmax_cross_entropy() {
-        // Test drafted by Claude Sonnet 3.5, human-edited for correctness
+        // Test originally drafted by Claude Sonnet 3.5, then human-edited for
+        // correctness, then further human-edited to be about sequences rather than
+        // the loss at a single position
 
         // Create a prediction tensor (logits)
         let prediction = Rc::new(
-            TensorBuilder::new(array![2.0, 1.0, 0.1].into_dyn())
+            TensorBuilder::new(array![[2.0, 1.0, 0.1], [0.1, 2.0, 1.0]].into_dyn())
                 .identifier("prediction")
                 .requires_gradient(true)
                 .build(),
@@ -1038,7 +1058,7 @@ mod tests {
 
         // Create a target tensor (true probabilities)
         let target = Rc::new(
-            TensorBuilder::new(array![1.0, 0.0, 0.0].into_dyn())
+            TensorBuilder::new(array![[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]].into_dyn())
                 .identifier("target")
                 .requires_gradient(false)
                 .build(),
@@ -1047,25 +1067,27 @@ mod tests {
         let softmax_cross_entropy = SoftmaxCrossEntropy {};
         let result = softmax_cross_entropy.forward(vec![prediction.clone(), target.clone()]);
 
-        assert_abs_diff_eq!(result.array.borrow()[0], 0.4170, epsilon = 0.0001);
-
-        // Test backward pass
-        backprop(result);
-
-        // Check gradients after backpropagation
-        let prediction_gradient = prediction.gradient.borrow();
         // from PyTorch—
         //
-        // import torch
-        // criterion = torch.nn.CrossEntropyLoss()
-        // prediction = torch.tensor([2.0, 1.0, 0.1], requires_grad=True)
-        // target = torch.tensor([1., 0., 0.], requires_grad=True)
-        // loss = criterion(prediction, target)
-        // loss.backward()
-        //
-        // # In [2]: prediction.grad
-        // # Out[2]: tensor([-0.3410,  0.2424,  0.0986])
-        let expected_gradients = array![-0.3410, 0.2424, 0.0986];
+        // In [1]: import torch
+        //    ...: criterion = torch.nn.CrossEntropyLoss(reduction='sum')
+        //    ...: prediction = torch.tensor([[2.0, 1.0, 0.1], [0.1, 2.0, 1.0]], requires_grad=True)
+        //    ...: target = torch.tensor([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]], requires_grad=True)
+        //    ...: loss = criterion(prediction, target)
+        //    ...: loss.backward()
+
+        // In [2]: loss
+        // Out[2]: tensor(1.8341, grad_fn=<NegBackward0>)
+        assert_abs_diff_eq!(result.array.borrow()[0], 1.8341, epsilon = 0.0001);
+
+        backprop(result);
+
+        // In [3]: prediction.grad
+        // Out[3]:
+        // tensor([[-0.3410,  0.2424,  0.0986],
+        //         [ 0.0986,  0.6590, -0.7576]])
+        let prediction_gradient = prediction.gradient.borrow();
+        let expected_gradients = array![[-0.3410, 0.2424, 0.0986], [0.0986, 0.6590, -0.7576]];
 
         for (&actual, &expected) in prediction_gradient
             .as_ref()
