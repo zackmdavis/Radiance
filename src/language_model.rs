@@ -15,6 +15,7 @@ use crate::core::optimization::StochasticGradientDescentOptimizer;
 
 pub struct SmallLanguageModelConfiguration {
     vocabulary_size: usize,
+    context_window_size: usize,
     embedding_dimensionality: usize,
     attention_dimensionality: usize,
     head_count: usize,
@@ -25,6 +26,7 @@ impl Default for SmallLanguageModelConfiguration {
     fn default() -> Self {
         Self {
             vocabulary_size: TokenVocabulary::default().size(),
+            context_window_size: 100,
             embedding_dimensionality: 64,
             attention_dimensionality: 16,
             head_count: 4,
@@ -97,21 +99,18 @@ pub fn train_slm() -> SmallLanguageModel {
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
     let training_tokenstream = token_vocabulary.tokenize(training_megastring);
 
-    for context_window in training_tokenstream.windows(64) {
+    for context_window in training_tokenstream.windows(network.configuration.context_window_size) {
         // We shift the input sequence by one (padding the beginning with a
         // start-of-sequence token, so that each position can predict its own
         // next token.
         let mut input_vec = vec![0.0]; // start-of-sequence token
-        input_vec.extend(&context_window[..63]);
+        input_vec.extend(&context_window[..network.configuration.context_window_size - 1]);
         let target_vec = context_window.to_vec();
-
-        println!("input: {:?} {}", input_vec, input_vec.len());
-        println!("target: {:?} {}", target_vec, target_vec.len());
 
         // Input is a one-dimensional array of token IDs.
         let input = Rc::new(
             TensorBuilder::new(
-                Array1::from_shape_vec((64,), input_vec)
+                Array1::from_shape_vec((network.configuration.context_window_size,), input_vec)
                     .expect("array should build")
                     .into_dyn(),
             )
@@ -123,13 +122,19 @@ pub fn train_slm() -> SmallLanguageModel {
         // Targets, like, logits, is a (context_window, vocabulary_size) matrix.
         let targets = Rc::new(
             TensorBuilder::new(
-                Array2::from_shape_fn((64, token_vocabulary.size()), |(i, j)| {
-                    if target_vec[i] == j as f32 {
-                        1.
-                    } else {
-                        0.
-                    }
-                })
+                Array2::from_shape_fn(
+                    (
+                        network.configuration.context_window_size,
+                        token_vocabulary.size(),
+                    ),
+                    |(i, j)| {
+                        if target_vec[i] == j as f32 {
+                            1.
+                        } else {
+                            0.
+                        }
+                    },
+                )
                 .into_dyn(),
             )
             .build(),

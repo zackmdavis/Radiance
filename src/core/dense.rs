@@ -8,7 +8,7 @@ use ndarray_rand::RandomExt;
 
 use super::{Tensor, TensorBuilder};
 use crate::core::operations::{
-    Addition, LeakyRectifiedLinearUnit, MatrixMultiplication, Operation,
+    Addition, ConcatenateColumns, LeakyRectifiedLinearUnit, MatrixMultiplication, Operation,
 };
 
 pub struct Linear {
@@ -55,11 +55,6 @@ impl Linear {
         let biases =
             Array::random((out_dimensionality, 1), Uniform::new(-k.sqrt(), k.sqrt())).into_dyn();
 
-        println!(
-            "creating Linear layer with weights shape {:?} and biases shape {:?}",
-            (out_dimensionality, in_dimensionality),
-            (out_dimensionality, 1)
-        );
         Self::from_weights(identifier, weights, biases)
     }
 
@@ -81,9 +76,11 @@ impl Linear {
     }
 
     pub fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
-        // TODO: need to be able to handle matrix input!!
-        let product = MatrixMultiplication {}.forward(vec![self.weights.clone(), input]);
-        let sum = Addition {}.forward(vec![product, self.biases.clone()]);
+        let product = MatrixMultiplication {}.forward(vec![self.weights.clone(), input.clone()]);
+        // If input isn't a column vector, we need to broadcast the biases
+        let width = input.borrow_array().shape()[1];
+        let bias = ConcatenateColumns {}.forward(vec![self.biases.clone(); width]);
+        let sum = Addition {}.forward(vec![product, bias]);
         sum
     }
 }

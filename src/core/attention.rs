@@ -8,8 +8,8 @@ use ndarray_rand::RandomExt;
 
 use super::dense::MultiLayerPerceptron;
 use super::operations::{
-    Addition, Concatenate, Mask, MatrixMultiplication, Multiplication, Operation, SoftmaxRows,
-    Transpose,
+    Addition, ConcatenateColumns, Mask, MatrixMultiplication, Multiplication, Operation,
+    SoftmaxRows, Transpose,
 };
 use super::{Origin, Tensor, TensorBuilder};
 
@@ -192,7 +192,7 @@ impl AttentionMultiHead {
             .iter()
             .map(|head| head.forward(x.clone()))
             .collect::<Vec<_>>();
-        let h = Concatenate {}.forward(hs);
+        let h = ConcatenateColumns {}.forward(hs);
         MatrixMultiplication {}.forward(vec![h, self.output_weights.clone()])
     }
 }
@@ -241,9 +241,15 @@ impl AttentionLayer {
     pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
         // TODO: there are supposed to be LayerNorms here
         let y = self.attention_multihead.forward(x.clone());
-        let z = Addition {}.forward(vec![y, x]); // residual connection—nice
-        let percepted = self.multi_layer_perceptron.forward(z.clone());
-        let attended = Addition {}.forward(vec![percepted, z]);
+        // residual connection—nice
+        let z = Addition {}.forward(vec![y, x]);
+        // the clash of row vs. column vector conventions (Ax⃗ + b⃗, vs. x⃗A^T +
+        // b⃗) between attention and my little perceptron means we have to do a
+        // transpose on either side of the MLP
+        let z_t = Transpose {}.forward(vec![z.clone()]);
+        let percepted = self.multi_layer_perceptron.forward(z_t.clone());
+        let percepted_t = Transpose {}.forward(vec![percepted]);
+        let attended = Addition {}.forward(vec![percepted_t, z]);
         attended
     }
 }

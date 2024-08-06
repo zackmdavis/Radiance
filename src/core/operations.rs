@@ -281,9 +281,9 @@ impl Operation for Transpose {
     }
 }
 
-pub struct Concatenate {}
+pub struct ConcatenateColumns {}
 
-impl Operation for Concatenate {
+impl Operation for ConcatenateColumns {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
         let arrays = inputs
             .iter()
@@ -293,7 +293,7 @@ impl Operation for Concatenate {
         let catted =
             ndarray::concatenate(Axis(1), array_views.as_slice()).expect("shapes should cat");
         let origin = Origin {
-            operation: Box::new(Concatenate {}),
+            operation: Box::new(ConcatenateColumns {}),
             parents: inputs.clone(),
         };
         Rc::new(TensorBuilder::new(catted.into_dyn()).origin(origin).build())
@@ -996,19 +996,19 @@ mod tests {
                 .requires_gradient(true)
                 .build(),
         );
-        let result = Concatenate {}.forward(vec![ta, tb]);
+        let result = ConcatenateColumns {}.forward(vec![ta, tb]);
         let result_array = result.array.borrow();
         assert_eq!(
             *result_array,
             array![[1.0, 2.0, 4.0, 5.0], [3.0, 4.0, 6.0, 7.0]].into_dyn()
         );
         let out_gradient = array![[1., 2., 3., 4.], [5., 6., 7., 8.]].into_dyn();
-        let back_0 = Concatenate {}.backward(
+        let back_0 = ConcatenateColumns {}.backward(
             &out_gradient,
             result.origin.as_ref().unwrap().parents.clone(),
             0,
         );
-        let back_1 = Concatenate {}.backward(
+        let back_1 = ConcatenateColumns {}.backward(
             &out_gradient,
             result.origin.as_ref().unwrap().parents.clone(),
             1,
