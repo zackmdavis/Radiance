@@ -12,4 +12,5 @@ ndarray = {git = "https://github.com/rust-ndarray/ndarray", features = ["approx"
 ndarray-rand = { git = "https://github.com/rust-ndarray/ndarray" }
 num-traits = "*"
 rand = "*"
+rand_distr = "0.4.3"
 topological-sort = "*"

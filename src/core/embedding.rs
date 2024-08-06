@@ -9,9 +9,10 @@ use super::operations::{MatrixMultiplication, Operation, Transpose};
 use super::{Origin, Tensor, TensorBuilder};
 
 pub struct TokenVocabulary {
-    token_to_id: HashMap<char, u8>,
+    // TODO: getter methods (that don't return Option) instead of pub HashMap
+    pub token_to_id: HashMap<char, u8>,
     #[allow(dead_code)]
-    id_to_token: HashMap<u8, char>,
+    pub id_to_token: HashMap<u8, char>,
 }
 
 impl TokenVocabulary {

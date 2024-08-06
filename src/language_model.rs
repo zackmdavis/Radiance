@@ -4,12 +4,15 @@ use std::fs;
 use std::rc::Rc;
 
 use ndarray::prelude::*;
+use rand::prelude::*;
+
+use rand_distr::weighted_alias::WeightedAliasIndex;
 
 use crate::core::attention::AttentionLayer;
 use crate::core::embedding::{sequence_positional_encoding, TokenEmbedding, TokenVocabulary};
 use crate::core::{backprop, Tensor, TensorBuilder};
 
-use crate::core::operations::{Addition, Operation, SoftmaxCrossEntropy};
+use crate::core::operations::{softmax, Addition, Operation, SoftmaxCrossEntropy};
 
 use crate::core::optimization::StochasticGradientDescentOptimizer;
 
@@ -25,6 +28,7 @@ pub struct SmallLanguageModelConfiguration {
 impl Default for SmallLanguageModelConfiguration {
     fn default() -> Self {
         Self {
+            // TODO: just make the vocabulary a model property already?
             vocabulary_size: TokenVocabulary::default().size(),
             context_window_size: 100,
             embedding_dimensionality: 64,
@@ -88,12 +92,48 @@ impl SmallLanguageModel {
     }
 }
 
-pub fn train_slm() -> SmallLanguageModel {
-    let network = SmallLanguageModel::new(
-        "my_language_model",
-        SmallLanguageModelConfiguration::default(),
-    );
-    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.01);
+pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>) -> char {
+    let n = logits.borrow_array().shape()[0];
+    let logit_matrix = logits
+        .borrow_array()
+        .clone()
+        .into_dimensionality::<Ix2>()
+        .expect("two-dimensional");
+    let next_token_logits = logit_matrix.row(n - 1);
+    println!("next token logits: {:?}", next_token_logits);
+    let next_token_distribution =
+        WeightedAliasIndex::new(softmax(next_token_logits.to_owned()).to_vec()).unwrap();
+    let mut rng = thread_rng();
+    let next_token_id = next_token_distribution.sample(&mut rng);
+    let next_token = token_vocabulary
+        .id_to_token
+        .get(&(next_token_id as u8))
+        .unwrap();
+    *next_token
+}
+
+pub fn sample_text(network: &SmallLanguageModel, token_vocabulary: &TokenVocabulary) -> String {
+    let mut raw_context = vec![0.0];
+    let mut text = Vec::new();
+    for _ in 0..40 {
+        let input = Rc::new(
+            TensorBuilder::new(
+                Array::from_shape_vec((raw_context.len(),), raw_context.clone())
+                    .expect("array should build")
+                    .into_dyn(),
+            )
+            .build(),
+        );
+        let logits = network.forward(input);
+        let next_token = sample_next_token(&token_vocabulary, logits);
+        text.push(next_token);
+        raw_context.push(*token_vocabulary.token_to_id.get(&next_token).unwrap() as f32);
+    }
+    text.iter().collect()
+}
+
+pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
+    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0000001);
     let token_vocabulary = TokenVocabulary::default();
 
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
@@ -143,6 +183,31 @@ pub fn train_slm() -> SmallLanguageModel {
         backprop(loss);
         optimizer.step();
         optimizer.unset_gradients();
+
+        if optimizer.step_count() % 20 == 0 {
+            println!(
+                "sample after {} steps: {}",
+                optimizer.step_count(),
+                sample_text(&network, &token_vocabulary)
+            );
+        }
     }
     network
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_network_output() {
+        let network = SmallLanguageModel::new(
+            "my_language_model",
+            SmallLanguageModelConfiguration::default(),
+        );
+        let output = network.forward(Rc::new(
+            TensorBuilder::new(array![0.0, 1.0].into_dyn()).build(),
+        ));
+        assert_eq!(output.borrow_array().shape(), &[2, 97]);
+    }
 }

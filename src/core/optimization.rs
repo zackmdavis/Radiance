@@ -38,6 +38,10 @@ impl StochasticGradientDescentOptimizer {
         }
     }
 
+    pub fn step_count(&self) -> usize {
+        self.step_count
+    }
+
     pub fn unset_gradients(&self) {
         for parameter in &self.parameters {
             parameter.unset_gradient();

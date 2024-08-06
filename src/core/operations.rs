@@ -357,7 +357,7 @@ impl Operation for SquaredError {
 }
 
 // TODO: should this take an ArrayView1?
-fn softmax(x: Array1<f32>) -> Array1<f32> {
+pub fn softmax(x: Array1<f32>) -> Array1<f32> {
     // TODO: shift the maximum element to zero for numerical stability?
     // https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
     // #computing-softmax-and-numerical-stability
