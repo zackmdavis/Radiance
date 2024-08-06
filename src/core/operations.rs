@@ -23,10 +23,19 @@ impl Operation for Addition {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
         assert!(inputs.len() == 2, "binary operation expected");
         // clone has dubious performance implications?
-        let array = inputs[0].array.borrow().clone() + inputs[1].array.borrow().clone();
+        let a = inputs[0].borrow_array().clone();
+        let b = inputs[1].borrow_array().clone();
+        assert_eq!(
+            a.shape(),
+            b.shape(),
+            "{:?} ≠ {:?} auto-broadcasting is in violation of the moral law",
+            a.shape(),
+            b.shape()
+        );
+        let array = a + b;
         let origin = Origin {
             operation: Box::new(Addition {}),
-            parents: vec![inputs[0].clone(), inputs[1].clone()],
+            parents: inputs.clone(),
         };
         Rc::new(TensorBuilder::new(array).origin(origin).build())
     }
@@ -590,7 +599,6 @@ impl Operation for SoftmaxCrossEntropy {
         // The fact that this turns out to be so tidy is the motivation for
         // combining a softmax activation with a cross entropy-loss as one
         // operation.
-
         let local_gradient = Array::from_shape_fn(logits.raw_dim(), |(i, j)| {
             predictions[[i, j]] - targets[[i, j]]
         });

@@ -165,7 +165,7 @@ fn sorted_computation_graph(end: Rc<Tensor>) -> Vec<Rc<Tensor>> {
     sorted
 }
 
-fn backprop(culmination: Rc<Tensor>) {
+pub fn backprop(culmination: Rc<Tensor>) {
     let mut gradients = HashMap::<String, ArrayD<f32>>::new();
     gradients.insert(
         culmination.identifier.clone(),

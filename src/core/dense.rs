@@ -81,6 +81,7 @@ impl Linear {
     }
 
     pub fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
+        // TODO: need to be able to handle matrix input!!
         let product = MatrixMultiplication {}.forward(vec![self.weights.clone(), input]);
         let sum = Addition {}.forward(vec![product, self.biases.clone()]);
         sum

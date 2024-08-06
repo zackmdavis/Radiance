@@ -218,7 +218,11 @@ impl AttentionLayer {
         );
         let multi_layer_perceptron = MultiLayerPerceptron::new(
             &format!("{}_mlp", identifier),
-            vec![embedding_dimensionality; 2],
+            vec![
+                embedding_dimensionality,
+                4 * embedding_dimensionality,
+                embedding_dimensionality,
+            ],
         );
         Self {
             identifier: identifier.to_owned(),

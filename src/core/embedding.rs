@@ -28,6 +28,10 @@ impl TokenVocabulary {
         }
     }
 
+    pub fn size(&self) -> usize {
+        self.token_to_id.len()
+    }
+
     pub fn tokenize(&self, text: String) -> Vec<f32> {
         let mut token_ids = Vec::new();
         for c in text.chars() {

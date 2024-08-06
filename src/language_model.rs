@@ -7,41 +7,56 @@ use ndarray::prelude::*;
 
 use crate::core::attention::AttentionLayer;
 use crate::core::embedding::{sequence_positional_encoding, TokenEmbedding, TokenVocabulary};
-use crate::core::{Tensor, TensorBuilder};
+use crate::core::{backprop, Tensor, TensorBuilder};
 
-use crate::core::operations::{Addition, Operation};
+use crate::core::operations::{Addition, Operation, SoftmaxCrossEntropy};
 
 use crate::core::optimization::StochasticGradientDescentOptimizer;
 
+pub struct SmallLanguageModelConfiguration {
+    vocabulary_size: usize,
+    embedding_dimensionality: usize,
+    attention_dimensionality: usize,
+    head_count: usize,
+    layer_count: usize,
+}
+
+impl Default for SmallLanguageModelConfiguration {
+    fn default() -> Self {
+        Self {
+            vocabulary_size: TokenVocabulary::default().size(),
+            embedding_dimensionality: 64,
+            attention_dimensionality: 16,
+            head_count: 4,
+            layer_count: 2,
+        }
+    }
+}
+
 pub struct SmallLanguageModel {
+    configuration: SmallLanguageModelConfiguration,
     token_embedding: TokenEmbedding,
     attention_layers: Vec<AttentionLayer>,
 }
 
 impl SmallLanguageModel {
-    pub fn new(
-        identifier: &str,
-        vocabulary_size: usize,
-        embedding_dimensionality: usize,
-        attention_dimensionality: usize,
-        head_count: usize,
-        layer_count: usize,
-    ) -> Self {
+    pub fn new(identifier: &str, configuration: SmallLanguageModelConfiguration) -> Self {
         let token_embedding = TokenEmbedding::new(
             &format!("{}_token_embedding", identifier),
-            vocabulary_size,
-            embedding_dimensionality,
+            configuration.vocabulary_size,
+            configuration.embedding_dimensionality,
         );
         let mut attention_layers = Vec::new();
-        for layer_no in 0..layer_count {
+        for layer_no in 0..configuration.layer_count {
             attention_layers.push(AttentionLayer::new(
                 &format!("{}_layer_{}", identifier, layer_no),
-                head_count,
-                embedding_dimensionality,
-                attention_dimensionality,
+                configuration.head_count,
+                configuration.embedding_dimensionality,
+                configuration.attention_dimensionality,
             ));
         }
         Self {
+            configuration,
             token_embedding,
             attention_layers,
         }
@@ -56,9 +71,9 @@ impl SmallLanguageModel {
         parameters
     }
 
-    pub fn forward(&self, token_sequence: Rc<Tensor>) -> Rc<Tensor> {
-        let sequence_length = token_sequence.borrow_array().shape()[0];
-        let mut x = self.token_embedding.embed(token_sequence);
+    pub fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
+        let sequence_length = input.borrow_array().shape()[0];
+        let mut x = self.token_embedding.embed(input);
         x = Addition {}.forward(vec![
             x,
             sequence_positional_encoding(sequence_length, self.token_embedding.dimensionality()),
@@ -72,8 +87,11 @@ impl SmallLanguageModel {
 }
 
 pub fn train_slm() -> SmallLanguageModel {
-    let network = SmallLanguageModel::new("my_language_model", 128, 64, 16, 4, 2);
-    let mut _optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.01);
+    let network = SmallLanguageModel::new(
+        "my_language_model",
+        SmallLanguageModelConfiguration::default(),
+    );
+    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.01);
     let token_vocabulary = TokenVocabulary::default();
 
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
@@ -86,31 +104,40 @@ pub fn train_slm() -> SmallLanguageModel {
         let mut input_vec = vec![0.0]; // start-of-sequence token
         input_vec.extend(&context_window[..63]);
         let target_vec = context_window.to_vec();
+
         println!("input: {:?} {}", input_vec, input_vec.len());
         println!("target: {:?} {}", target_vec, target_vec.len());
-        let _input = Rc::new(
+
+        // Input is a one-dimensional array of token IDs.
+        let input = Rc::new(
             TensorBuilder::new(
-                Array2::from_shape_vec((1, 64), input_vec)
-                    .expect("array should build")
-                    .into_dyn(),
-            )
-            .build(),
-        );
-        let _target = Rc::new(
-            TensorBuilder::new(
-                Array2::from_shape_vec((1, 64), target_vec)
+                Array1::from_shape_vec((64,), input_vec)
                     .expect("array should build")
                     .into_dyn(),
             )
             .build(),
         );
 
-        // ... and my `SoftmaxCrossEntropy` needs to be rewritten to operate on
-        // a sequence of distributions (one for each position) rather than a
-        // single distribution
+        let logits = network.forward(input);
 
-        // TODO continue ...
+        // Targets, like, logits, is a (context_window, vocabulary_size) matrix.
+        let targets = Rc::new(
+            TensorBuilder::new(
+                Array2::from_shape_fn((64, token_vocabulary.size()), |(i, j)| {
+                    if target_vec[i] == j as f32 {
+                        1.
+                    } else {
+                        0.
+                    }
+                })
+                .into_dyn(),
+            )
+            .build(),
+        );
+        let loss = SoftmaxCrossEntropy {}.forward(vec![logits, targets]);
+        backprop(loss);
+        optimizer.step();
+        optimizer.unset_gradients();
     }
-
     network
 }
