@@ -5,9 +5,10 @@ use ndarray::prelude::*;
 
 use super::{Origin, Tensor, TensorBuilder};
 
+#[derive(Debug)]
 pub struct Addition {}
 
-pub trait Operation {
+pub trait Operation: std::fmt::Debug {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor>;
     fn backward(
         &self,
@@ -50,6 +51,7 @@ impl Operation for Addition {
     }
 }
 
+#[derive(Debug)]
 pub struct Multiplication {}
 
 impl Operation for Multiplication {
@@ -78,6 +80,7 @@ impl Operation for Multiplication {
     }
 }
 
+#[derive(Debug)]
 pub struct MatrixMultiplication {}
 
 impl Operation for MatrixMultiplication {
@@ -141,6 +144,7 @@ impl Operation for MatrixMultiplication {
     }
 }
 
+#[derive(Debug)]
 pub struct RectifiedLinearUnit {}
 
 impl Operation for RectifiedLinearUnit {
@@ -169,6 +173,7 @@ impl Operation for RectifiedLinearUnit {
     }
 }
 
+#[derive(Debug)]
 pub struct LeakyRectifiedLinearUnit {
     leak: f32,
 }
@@ -212,6 +217,7 @@ impl Operation for LeakyRectifiedLinearUnit {
     }
 }
 
+#[derive(Debug)]
 pub struct Reshape {
     new_shape: Vec<usize>,
 }
@@ -254,6 +260,7 @@ impl Operation for Reshape {
     }
 }
 
+#[derive(Debug)]
 pub struct Transpose {}
 
 impl Operation for Transpose {
@@ -281,6 +288,7 @@ impl Operation for Transpose {
     }
 }
 
+#[derive(Debug)]
 pub struct ConcatenateColumns {}
 
 impl Operation for ConcatenateColumns {
@@ -317,6 +325,7 @@ impl Operation for ConcatenateColumns {
     }
 }
 
+#[derive(Debug)]
 pub struct SquaredError {}
 
 impl Operation for SquaredError {
@@ -375,6 +384,7 @@ fn δ(i: usize, j: usize) -> f32 {
     }
 }
 
+#[derive(Debug)]
 pub struct Softmax {}
 
 impl Operation for Softmax {
@@ -431,6 +441,7 @@ impl Operation for Softmax {
     }
 }
 
+#[derive(Debug)]
 pub struct SoftmaxRows {}
 
 impl Operation for SoftmaxRows {
@@ -514,6 +525,7 @@ impl Operation for SoftmaxRows {
     }
 }
 
+#[derive(Debug)]
 pub struct SoftmaxCrossEntropy {}
 
 impl Operation for SoftmaxCrossEntropy {
@@ -606,6 +618,7 @@ impl Operation for SoftmaxCrossEntropy {
     }
 }
 
+#[derive(Debug)]
 pub struct Mask {}
 
 impl Operation for Mask {

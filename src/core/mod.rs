@@ -142,6 +142,7 @@ impl From<f32> for Tensor {
     }
 }
 
+#[derive(Debug)]
 struct Origin {
     operation: Box<dyn Operation>,
     parents: Vec<Rc<Tensor>>,
@@ -190,6 +191,12 @@ pub fn backprop(culmination: Rc<Tensor>) {
                     origin
                         .operation
                         .backward(&out_gradient, origin.parents.clone(), i);
+                if contribution.is_any_nan() {
+                    println!(
+                        "contribution for {:?} contains NaN, operation of origin: {:?}",
+                        &parent.identifier, origin.operation
+                    );
+                }
                 match gradients.get_mut(&parent.identifier) {
                     Some(gradient) => {
                         *gradient = &*gradient + contribution;
