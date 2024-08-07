@@ -367,10 +367,12 @@ impl Operation for SquaredError {
 
 // TODO: should this take an ArrayView1?
 pub fn softmax(x: Array1<f32>) -> Array1<f32> {
-    // TODO: shift the maximum element to zero for numerical stability?
-    // https://eli.thegreenplace.net/2016/the-softmax-function-and-its-derivative/
-    // #computing-softmax-and-numerical-stability
-    let exp_x = x.iter().map(|x_i| x_i.exp()).collect::<Array1<f32>>();
+    let x_max = x.clone().into_iter().reduce(f32::max).unwrap(); // can't `.iter().max()` as f32 is not `Ord`
+    let x_shifted = x.iter().map(|x_i| x_i - x_max).collect::<Array1<f32>>(); // numerically stabler this way
+    let exp_x = x_shifted
+        .iter()
+        .map(|x_i| x_i.exp())
+        .collect::<Array1<f32>>();
     let scale: f32 = exp_x.iter().sum();
     let softmaxed = exp_x.iter().map(|x_i| x_i / scale).collect::<Array1<f32>>();
     softmaxed
@@ -1161,9 +1163,9 @@ mod tests {
         let expected_gradient = array![2087.3577, -1414.0009, -673.3572];
 
         for (&actual, &expected) in input_gradient.iter().zip(expected_gradient.iter()) {
-            // TODO: can we tolerate a lower ɛ after making the numerical
-            // stability improvement to softmax?
-            assert_abs_diff_eq!(actual, expected, epsilon = 0.001);
+            // The numerical stability improvement to softmax let us drop ε by
+            // about 8/10ths of an order of magnitude, but not more
+            assert_abs_diff_eq!(actual, expected, epsilon = 0.00013);
         }
     }
 
