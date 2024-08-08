@@ -99,7 +99,6 @@ pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>)
         .into_dimensionality::<Ix2>()
         .expect("two-dimensional");
     let next_token_logits = logit_matrix.row(n - 1);
-    println!("next token logits: {:?}", next_token_logits);
     let next_token_distribution =
         WeightedAliasIndex::new(softmax(next_token_logits.to_owned()).to_vec()).unwrap();
     let mut rng = thread_rng();
@@ -139,7 +138,7 @@ pub fn sample_text(network: &SmallLanguageModel) -> String {
 }
 
 pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
-    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0000001);
+    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0001);
 
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
     let training_tokenstream = network
