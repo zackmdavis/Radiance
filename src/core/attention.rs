@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports, unused_variables)]
-
 use std::rc::Rc;
 
 use ndarray::prelude::*;
@@ -11,9 +9,10 @@ use super::operations::{
     Addition, ConcatenateColumns, Mask, MatrixMultiplication, Multiplication, Operation,
     SoftmaxRows, Transpose,
 };
-use super::{Origin, Tensor, TensorBuilder};
+use super::{Tensor, TensorBuilder};
 
 pub struct AttentionHead {
+    #[allow(dead_code)]
     identifier: String,
     query_weights: Rc<Tensor>,
     // TODO—add biases
@@ -79,6 +78,7 @@ impl AttentionHead {
         }
     }
 
+    #[allow(dead_code)]
     pub fn embedding_dimensionality(&self) -> usize {
         self.key_weights // without loss of generality
             .array
@@ -132,6 +132,7 @@ impl AttentionHead {
 }
 
 pub struct AttentionMultiHead {
+    #[allow(dead_code)]
     identifier: String,
     heads: Vec<AttentionHead>,
     output_weights: Rc<Tensor>,
@@ -198,6 +199,7 @@ impl AttentionMultiHead {
 }
 
 pub struct AttentionLayer {
+    #[allow(dead_code)]
     identifier: String,
     attention_multihead: AttentionMultiHead,
     multi_layer_perceptron: MultiLayerPerceptron,

@@ -11,7 +11,6 @@ use super::{Origin, Tensor, TensorBuilder};
 pub struct TokenVocabulary {
     // TODO: getter methods (that don't return Option) instead of pub HashMap
     pub token_to_id: HashMap<char, u8>,
-    #[allow(dead_code)]
     pub id_to_token: HashMap<u8, char>,
 }
 
@@ -60,7 +59,6 @@ impl Default for TokenVocabulary {
     }
 }
 
-#[allow(dead_code)]
 fn single_positional_encoding(position: usize, embedding_dimensionality: usize) -> Vec<f32> {
     let mut vector = Vec::new();
     let base: f32 = 30.;
@@ -79,7 +77,6 @@ fn single_positional_encoding(position: usize, embedding_dimensionality: usize) 
     vector
 }
 
-#[allow(dead_code)]
 pub fn sequence_positional_encoding(length: usize, embedding_dimensionality: usize) -> Rc<Tensor> {
     let mut position_embedding = Array2::zeros((0, embedding_dimensionality));
     for position in 0..length {
@@ -110,7 +107,6 @@ pub struct TokenEmbedding {
     weights: Rc<Tensor>,
 }
 
-#[allow(dead_code)]
 impl TokenEmbedding {
     pub fn new(identifier: &str, vocabulary_size: usize, embedding_dimensionality: usize) -> Self {
         let weights = Array::random(

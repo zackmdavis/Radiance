@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::rc::Rc;
 
 use ndarray::prelude::*;
@@ -86,6 +84,7 @@ impl Linear {
 }
 
 pub struct MultiLayerPerceptron {
+    #[allow(dead_code)]
     identifier: String,
     layers: Vec<Linear>,
 }
