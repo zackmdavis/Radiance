@@ -12,10 +12,9 @@ fn main() {
     for parameter in network.parameters() {
         println!("{:?}", parameter.identifier());
     }
-    let token_vocabulary = core::embedding::TokenVocabulary::default();
     println!(
         "sample at initialization: {}",
-        language_model::sample_text(&network, &token_vocabulary)
+        language_model::sample_text(&network)
     );
 
     language_model::train_slm(network);

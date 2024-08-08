@@ -17,7 +17,7 @@ use crate::core::operations::{softmax, Addition, Operation, SoftmaxCrossEntropy}
 use crate::core::optimization::StochasticGradientDescentOptimizer;
 
 pub struct SmallLanguageModelConfiguration {
-    vocabulary_size: usize,
+    token_vocabulary: TokenVocabulary,
     context_window_size: usize,
     embedding_dimensionality: usize,
     attention_dimensionality: usize,
@@ -28,8 +28,7 @@ pub struct SmallLanguageModelConfiguration {
 impl Default for SmallLanguageModelConfiguration {
     fn default() -> Self {
         Self {
-            // TODO: just make the vocabulary a model property already?
-            vocabulary_size: TokenVocabulary::default().size(),
+            token_vocabulary: TokenVocabulary::default(),
             context_window_size: 100,
             embedding_dimensionality: 64,
             attention_dimensionality: 16,
@@ -49,7 +48,7 @@ impl SmallLanguageModel {
     pub fn new(identifier: &str, configuration: SmallLanguageModelConfiguration) -> Self {
         let token_embedding = TokenEmbedding::new(
             &format!("{}_token_embedding", identifier),
-            configuration.vocabulary_size,
+            configuration.token_vocabulary.size(),
             configuration.embedding_dimensionality,
         );
         let mut attention_layers = Vec::new();
@@ -112,7 +111,7 @@ pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>)
     *next_token
 }
 
-pub fn sample_text(network: &SmallLanguageModel, token_vocabulary: &TokenVocabulary) -> String {
+pub fn sample_text(network: &SmallLanguageModel) -> String {
     let mut raw_context = vec![0.0];
     let mut text = Vec::new();
     for _ in 0..40 {
@@ -125,19 +124,28 @@ pub fn sample_text(network: &SmallLanguageModel, token_vocabulary: &TokenVocabul
             .build(),
         );
         let logits = network.forward(input);
-        let next_token = sample_next_token(&token_vocabulary, logits);
+        let next_token = sample_next_token(&network.configuration.token_vocabulary, logits);
         text.push(next_token);
-        raw_context.push(*token_vocabulary.token_to_id.get(&next_token).unwrap() as f32);
+        raw_context.push(
+            *network
+                .configuration
+                .token_vocabulary
+                .token_to_id
+                .get(&next_token)
+                .unwrap() as f32,
+        );
     }
     text.iter().collect()
 }
 
 pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
     let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0000001);
-    let token_vocabulary = TokenVocabulary::default();
 
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
-    let training_tokenstream = token_vocabulary.tokenize(training_megastring);
+    let training_tokenstream = network
+        .configuration
+        .token_vocabulary
+        .tokenize(training_megastring);
 
     for context_window in training_tokenstream.windows(network.configuration.context_window_size) {
         // We shift the input sequence by one (padding the beginning with a
@@ -165,7 +173,7 @@ pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
                 Array2::from_shape_fn(
                     (
                         network.configuration.context_window_size,
-                        token_vocabulary.size(),
+                        network.configuration.token_vocabulary.size(),
                     ),
                     |(i, j)| {
                         if target_vec[i] == j as f32 {
@@ -188,7 +196,7 @@ pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
             println!(
                 "sample after {} steps: {}",
                 optimizer.step_count(),
-                sample_text(&network, &token_vocabulary)
+                sample_text(&network)
             );
         }
     }
