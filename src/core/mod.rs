@@ -74,6 +74,11 @@ impl Tensor {
     pub fn unset_gradient(&self) {
         *self.gradient.borrow_mut() = None
     }
+
+    pub fn item(&self) -> f32 {
+        assert_eq!(self.borrow_array().shape(), &[1,]);
+        self.borrow_array()[0]
+    }
 }
 
 pub struct TensorBuilder {
@@ -196,6 +201,7 @@ pub fn backprop(culmination: Rc<Tensor>) {
                         "contribution for {:?} contains NaN, operation of origin: {:?}",
                         &parent.identifier, origin.operation
                     );
+                    assert!(false);
                 }
                 match gradients.get_mut(&parent.identifier) {
                     Some(gradient) => {

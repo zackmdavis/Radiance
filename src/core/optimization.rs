@@ -79,9 +79,6 @@ impl Optimizer for AdaptiveMomentEstimationOptimizer {
         }
 
         self.step_count += 1;
-        if self.step_count % 10 == 0 {
-            println!("optimization step {} complete", self.step_count);
-        }
     }
 
     fn step_count(&self) -> usize {
@@ -123,9 +120,6 @@ impl Optimizer for StochasticGradientDescentOptimizer {
             *array -= &(self.learning_rate * gradient);
         }
         self.step_count += 1;
-        if self.step_count % 10 == 0 {
-            println!("optimization step {}!", self.step_count);
-        }
     }
 
     fn step_count(&self) -> usize {

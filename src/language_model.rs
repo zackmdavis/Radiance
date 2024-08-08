@@ -1,5 +1,6 @@
 use std::fs;
 use std::rc::Rc;
+use std::time;
 
 use ndarray::prelude::*;
 use rand::prelude::*;
@@ -136,13 +137,16 @@ pub fn sample_text(network: &SmallLanguageModel) -> String {
 }
 
 pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
-    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0001);
+    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0005);
 
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
     let training_tokenstream = network
         .configuration
         .token_vocabulary
         .tokenize(training_megastring);
+
+    let start_time = time::Instant::now();
+    let mut last_status_update = time::Instant::now();
 
     for context_window in training_tokenstream.windows(network.configuration.context_window_size) {
         // We shift the input sequence by one (padding the beginning with a
@@ -185,16 +189,20 @@ pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
             .build(),
         );
         let loss = SoftmaxCrossEntropy {}.forward(vec![logits, targets]);
+        let loss_value = loss.item();
         backprop(loss);
         optimizer.step();
         optimizer.unset_gradients();
 
-        if optimizer.step_count() % 20 == 0 {
+        if last_status_update.elapsed() > time::Duration::from_secs(10) {
             println!(
-                "sample after {} steps: {}",
+                "after {}s, {} steps, loss: {}",
+                start_time.elapsed().as_secs(),
                 optimizer.step_count(),
-                sample_text(&network)
+                loss_value
             );
+            println!("sample: {:?}", sample_text(&network));
+            last_status_update = time::Instant::now();
         }
     }
     network
