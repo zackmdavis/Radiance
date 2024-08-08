@@ -689,8 +689,6 @@ impl Operation for Mask {
 
 // `Lookup` Operation in embedding.rs
 
-// TODO: token-embedding, positional-embedding, layernorm ...
-
 #[cfg(test)]
 mod tests {
     use super::*;
