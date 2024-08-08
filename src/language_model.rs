@@ -75,6 +75,18 @@ impl SmallLanguageModel {
         parameters
     }
 
+    pub fn parameter_count(&self) -> usize {
+        let mut scalar_parameter_count = 0;
+        for tensor_parameter in self.parameters() {
+            scalar_parameter_count += tensor_parameter
+                .borrow_array()
+                .shape()
+                .iter()
+                .product::<usize>();
+        }
+        scalar_parameter_count
+    }
+
     pub fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
         let sequence_length = input.borrow_array().shape()[0];
         let mut x = self.token_embedding.embed(input);

@@ -9,8 +9,9 @@ fn main() {
         "my_language_model",
         language_model::SmallLanguageModelConfiguration::default(),
     );
+    println!("parameter count: {}", network.parameter_count());
     for parameter in network.parameters() {
-        println!("{:?}", parameter.identifier());
+        println!("{:?} {:?}", parameter.identifier(), parameter.borrow_array().shape());
     }
     println!(
         "sample at initialization: {}",
