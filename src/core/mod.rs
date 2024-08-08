@@ -216,6 +216,22 @@ pub fn backprop(culmination: Rc<Tensor>) {
     }
 }
 
+pub trait Parameterized {
+    fn parameters(&self) -> Vec<Rc<Tensor>>;
+
+    fn parameter_count(&self) -> usize {
+        let mut scalar_parameter_count = 0;
+        for tensor_parameter in self.parameters() {
+            scalar_parameter_count += tensor_parameter
+                .borrow_array()
+                .shape()
+                .iter()
+                .product::<usize>();
+        }
+        scalar_parameter_count
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

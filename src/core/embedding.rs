@@ -6,7 +6,7 @@ use ndarray_rand::rand_distr::StandardNormal;
 use ndarray_rand::RandomExt;
 
 use super::operations::{MatrixMultiplication, Operation, Transpose};
-use super::{Origin, Tensor, TensorBuilder};
+use super::{Origin, Parameterized, Tensor, TensorBuilder};
 
 pub struct TokenVocabulary {
     // TODO: getter methods (that don't return Option) instead of pub HashMap
@@ -126,10 +126,6 @@ impl TokenEmbedding {
         }
     }
 
-    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
-        vec![self.weights.clone()]
-    }
-
     pub fn dimensionality(&self) -> usize {
         self.weights.array.borrow().shape()[1]
     }
@@ -141,6 +137,12 @@ impl TokenEmbedding {
     pub fn unembed(&self, x: Rc<Tensor>) -> Rc<Tensor> {
         let u = Transpose {}.forward(vec![self.weights.clone()]);
         MatrixMultiplication {}.forward(vec![x, u])
+    }
+}
+
+impl Parameterized for TokenEmbedding {
+    fn parameters(&self) -> Vec<Rc<Tensor>> {
+        vec![self.weights.clone()]
     }
 }
 

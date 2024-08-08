@@ -4,7 +4,7 @@ use ndarray::prelude::*;
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
 
-use super::{Tensor, TensorBuilder};
+use super::{Parameterized, Tensor, TensorBuilder};
 use crate::core::operations::{
     Addition, ConcatenateColumns, LeakyRectifiedLinearUnit, MatrixMultiplication, Operation,
 };
@@ -118,8 +118,10 @@ impl MultiLayerPerceptron {
         }
         x
     }
+}
 
-    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
+impl Parameterized for MultiLayerPerceptron {
+    fn parameters(&self) -> Vec<Rc<Tensor>> {
         let mut parameters = Vec::new();
         for layer in &self.layers {
             parameters.push(layer.weights.clone());

@@ -9,7 +9,7 @@ use rand_distr::weighted_alias::WeightedAliasIndex;
 
 use crate::core::attention::AttentionLayer;
 use crate::core::embedding::{sequence_positional_encoding, TokenEmbedding, TokenVocabulary};
-use crate::core::{backprop, Tensor, TensorBuilder};
+use crate::core::{backprop, Parameterized, Tensor, TensorBuilder};
 
 use crate::core::operations::{softmax, Addition, Operation, SoftmaxCrossEntropy};
 
@@ -41,6 +41,17 @@ pub struct SmallLanguageModel {
     attention_layers: Vec<AttentionLayer>,
 }
 
+impl Parameterized for SmallLanguageModel {
+    fn parameters(&self) -> Vec<Rc<Tensor>> {
+        let mut parameters = Vec::new();
+        parameters.extend(self.token_embedding.parameters());
+        for attention_layer in &self.attention_layers {
+            parameters.extend(attention_layer.parameters());
+        }
+        parameters
+    }
+}
+
 impl SmallLanguageModel {
     pub fn new(identifier: &str, configuration: SmallLanguageModelConfiguration) -> Self {
         let token_embedding = TokenEmbedding::new(
@@ -62,27 +73,6 @@ impl SmallLanguageModel {
             token_embedding,
             attention_layers,
         }
-    }
-
-    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
-        let mut parameters = Vec::new();
-        parameters.extend(self.token_embedding.parameters());
-        for attention_layer in &self.attention_layers {
-            parameters.extend(attention_layer.parameters());
-        }
-        parameters
-    }
-
-    pub fn parameter_count(&self) -> usize {
-        let mut scalar_parameter_count = 0;
-        for tensor_parameter in self.parameters() {
-            scalar_parameter_count += tensor_parameter
-                .borrow_array()
-                .shape()
-                .iter()
-                .product::<usize>();
-        }
-        scalar_parameter_count
     }
 
     pub fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {

@@ -3,6 +3,8 @@
 mod core;
 mod language_model;
 
+use crate::core::Parameterized;
+
 fn main() {
     println!("Hello neural network world!");
     let network = language_model::SmallLanguageModel::new(
@@ -11,7 +13,11 @@ fn main() {
     );
     println!("parameter count: {}", network.parameter_count());
     for parameter in network.parameters() {
-        println!("{:?} {:?}", parameter.identifier(), parameter.borrow_array().shape());
+        println!(
+            "{:?} {:?}",
+            parameter.identifier(),
+            parameter.borrow_array().shape()
+        );
     }
     println!(
         "sample at initialization: {}",

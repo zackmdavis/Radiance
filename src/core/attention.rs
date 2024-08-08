@@ -9,7 +9,7 @@ use super::operations::{
     Addition, ConcatenateColumns, Mask, MatrixMultiplication, Multiplication, Operation,
     SoftmaxRows, Transpose,
 };
-use super::{Tensor, TensorBuilder};
+use super::{Parameterized, Tensor, TensorBuilder};
 
 pub struct AttentionHead {
     #[allow(dead_code)]
@@ -90,14 +90,6 @@ impl AttentionHead {
         self.key_weights.array.borrow().shape()[1]
     }
 
-    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
-        vec![
-            self.query_weights.clone(),
-            self.key_weights.clone(),
-            self.value_weights.clone(),
-        ]
-    }
-
     pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
         // Input is shape (sequence_length, embedding_dimensionality).
         let n = x.array.borrow().shape()[0];
@@ -128,6 +120,16 @@ impl AttentionHead {
         let softmaxed = SoftmaxRows {}.forward(vec![masked]);
         let h = MatrixMultiplication {}.forward(vec![softmaxed, v]);
         h
+    }
+}
+
+impl Parameterized for AttentionHead {
+    fn parameters(&self) -> Vec<Rc<Tensor>> {
+        vec![
+            self.query_weights.clone(),
+            self.key_weights.clone(),
+            self.value_weights.clone(),
+        ]
     }
 }
 
@@ -178,15 +180,6 @@ impl AttentionMultiHead {
 }
 
 impl AttentionMultiHead {
-    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
-        let mut parameters = Vec::new();
-        for head in &self.heads {
-            parameters.extend(head.parameters());
-        }
-        parameters.push(self.output_weights.clone());
-        parameters
-    }
-
     pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
         let hs = self
             .heads
@@ -195,6 +188,17 @@ impl AttentionMultiHead {
             .collect::<Vec<_>>();
         let h = ConcatenateColumns {}.forward(hs);
         MatrixMultiplication {}.forward(vec![h, self.output_weights.clone()])
+    }
+}
+
+impl Parameterized for AttentionMultiHead {
+    fn parameters(&self) -> Vec<Rc<Tensor>> {
+        let mut parameters = Vec::new();
+        for head in &self.heads {
+            parameters.extend(head.parameters());
+        }
+        parameters.push(self.output_weights.clone());
+        parameters
     }
 }
 
@@ -233,13 +237,6 @@ impl AttentionLayer {
         }
     }
 
-    pub fn parameters(&self) -> Vec<Rc<Tensor>> {
-        let mut parameters = Vec::new();
-        parameters.extend(self.attention_multihead.parameters());
-        parameters.extend(self.multi_layer_perceptron.parameters());
-        parameters
-    }
-
     pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
         // TODO: there are supposed to be LayerNorms here
         let y = self.attention_multihead.forward(x.clone());
@@ -253,6 +250,15 @@ impl AttentionLayer {
         let percepted_t = Transpose {}.forward(vec![percepted]);
         let attended = Addition {}.forward(vec![percepted_t, z]);
         attended
+    }
+}
+
+impl Parameterized for AttentionLayer {
+    fn parameters(&self) -> Vec<Rc<Tensor>> {
+        let mut parameters = Vec::new();
+        parameters.extend(self.attention_multihead.parameters());
+        parameters.extend(self.multi_layer_perceptron.parameters());
+        parameters
     }
 }
 
