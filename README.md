@@ -6,7 +6,7 @@ Radiance is an educational neural networks library and autodifferentiation frame
 
 ### big
 
- * adaptive moment estimation optimizer
+ * figure out why Adam is worse than SGD
  * load/save weights
  * LayerNorm
 

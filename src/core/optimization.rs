@@ -1,11 +1,98 @@
 use std::rc::Rc;
 
+use ndarray::prelude::*;
+
 use super::Tensor;
 
 pub trait Optimizer {
     fn step(&mut self);
     fn step_count(&self) -> usize;
     fn unset_gradients(&self);
+}
+
+pub struct AdaptiveMomentEstimationOptimizer {
+    parameters: Vec<Rc<Tensor>>,
+    learning_rate: f32,
+    first_moment_estimates: Vec<ArrayD<f32>>,
+    second_moment_estimates: Vec<ArrayD<f32>>,
+    first_moment_estimate_decay: f32,
+    second_moment_estimate_decay: f32,
+    ε: f32,
+    step_count: usize,
+}
+
+impl AdaptiveMomentEstimationOptimizer {
+    #[allow(dead_code)]
+    pub fn new(
+        parameters: Vec<Rc<Tensor>>,
+        learning_rate: f32,
+        first_moment_estimate_decay: f32,
+        second_moment_estimate_decay: f32,
+        ε: f32,
+    ) -> Self {
+        let mut first_moment_estimates = Vec::new();
+        let mut second_moment_estimates = Vec::new();
+        for parameter in &parameters {
+            first_moment_estimates.push(Array::zeros(parameter.borrow_array().shape()));
+            second_moment_estimates.push(Array::zeros(parameter.borrow_array().shape()));
+        }
+
+        Self {
+            parameters,
+            learning_rate,
+            first_moment_estimates,
+            second_moment_estimates,
+            first_moment_estimate_decay,
+            second_moment_estimate_decay,
+            ε,
+            step_count: 0,
+        }
+    }
+}
+
+impl Optimizer for AdaptiveMomentEstimationOptimizer {
+    fn step(&mut self) {
+        for (i, parameter) in self.parameters.iter().enumerate() {
+            let mut array = parameter.array.borrow_mut();
+            let and_some_gradient = parameter.gradient.borrow();
+            let some_and_gradient = and_some_gradient.as_ref();
+            let gradient = some_and_gradient.expect("gradient should exist");
+
+            self.first_moment_estimates[i] = self.first_moment_estimate_decay
+                * &self.first_moment_estimates[i]
+                + (1. - self.first_moment_estimate_decay) * gradient;
+            self.second_moment_estimates[i] = self.second_moment_estimate_decay
+                * &self.second_moment_estimates[i]
+                + (1. - self.second_moment_estimate_decay) * (gradient * gradient);
+            self.first_moment_estimates[i] /= 1.
+                - self
+                    .first_moment_estimate_decay
+                    .powi((self.step_count + 1) as i32);
+            self.second_moment_estimates[i] /= 1.
+                - self
+                    .second_moment_estimate_decay
+                    .powi((self.step_count + 1) as i32);
+
+            *array = &*array
+                - self.learning_rate * &self.first_moment_estimates[i]
+                    / (self.second_moment_estimates[i].sqrt() + self.ε);
+        }
+
+        self.step_count += 1;
+        if self.step_count % 10 == 0 {
+            println!("optimization step {} complete", self.step_count);
+        }
+    }
+
+    fn step_count(&self) -> usize {
+        self.step_count
+    }
+
+    fn unset_gradients(&self) {
+        for parameter in &self.parameters {
+            parameter.unset_gradient();
+        }
+    }
 }
 
 pub struct StochasticGradientDescentOptimizer {
@@ -28,7 +115,7 @@ impl Optimizer for StochasticGradientDescentOptimizer {
     fn step(&mut self) {
         for parameter in &self.parameters {
             let mut array = parameter.array.borrow_mut();
-            // Compiler refuses to one-shot conversion from
+            // Compiler refuses to do one-shot conversion from
             // &Option<ArrayD<f32>> to Option<&ArrayD<f32>> to &ArrayD<f32>
             let and_some_gradient = parameter.gradient.borrow();
             let some_and_gradient = and_some_gradient.as_ref();
