@@ -11,7 +11,7 @@ use super::operations::{LeakyRectifiedLinearUnit, Operation, Reshape, SquaredErr
 use super::{backprop, Tensor, TensorBuilder};
 use crate::core::dense::Linear;
 
-use super::optimization::StochasticGradientDescentOptimizer;
+use super::optimization::{Optimizer, StochasticGradientDescentOptimizer};
 
 struct MyLittlePerceptron {
     layers: Vec<Linear>,

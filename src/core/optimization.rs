@@ -3,7 +3,8 @@ use std::rc::Rc;
 use super::Tensor;
 
 pub trait Optimizer {
-    fn step(&self);
+    fn step(&mut self);
+    fn step_count(&self) -> usize;
     fn unset_gradients(&self);
 }
 
@@ -21,8 +22,10 @@ impl StochasticGradientDescentOptimizer {
             step_count: 0,
         }
     }
+}
 
-    pub fn step(&mut self) {
+impl Optimizer for StochasticGradientDescentOptimizer {
+    fn step(&mut self) {
         for parameter in &self.parameters {
             let mut array = parameter.array.borrow_mut();
             // Compiler refuses to one-shot conversion from
@@ -38,11 +41,11 @@ impl StochasticGradientDescentOptimizer {
         }
     }
 
-    pub fn step_count(&self) -> usize {
+    fn step_count(&self) -> usize {
         self.step_count
     }
 
-    pub fn unset_gradients(&self) {
+    fn unset_gradients(&self) {
         for parameter in &self.parameters {
             parameter.unset_gradient();
         }

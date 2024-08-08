@@ -12,7 +12,7 @@ use crate::core::{backprop, Tensor, TensorBuilder};
 
 use crate::core::operations::{softmax, Addition, Operation, SoftmaxCrossEntropy};
 
-use crate::core::optimization::StochasticGradientDescentOptimizer;
+use crate::core::optimization::{Optimizer, StochasticGradientDescentOptimizer};
 
 pub struct SmallLanguageModelConfiguration {
     token_vocabulary: TokenVocabulary,
