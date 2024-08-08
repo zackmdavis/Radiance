@@ -27,10 +27,10 @@ impl Default for SmallLanguageModelConfiguration {
     fn default() -> Self {
         Self {
             token_vocabulary: TokenVocabulary::default(),
-            context_window_size: 100,
+            context_window_size: 125,
             embedding_dimensionality: 64,
             head_count: 4,
-            layer_count: 2,
+            layer_count: 4,
         }
     }
 }
@@ -122,7 +122,7 @@ pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>)
 pub fn sample_text(network: &SmallLanguageModel) -> String {
     let mut raw_context = vec![0.0];
     let mut text = Vec::new();
-    for _ in 0..40 {
+    for _ in 0..network.configuration.context_window_size {
         let input = Rc::new(
             TensorBuilder::new(
                 Array::from_shape_vec((raw_context.len(),), raw_context.clone())
@@ -147,7 +147,7 @@ pub fn sample_text(network: &SmallLanguageModel) -> String {
 }
 
 pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
-    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0005);
+    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0004);
 
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
     let training_tokenstream = network
