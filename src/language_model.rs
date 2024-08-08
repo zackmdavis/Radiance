@@ -19,7 +19,6 @@ pub struct SmallLanguageModelConfiguration {
     token_vocabulary: TokenVocabulary,
     context_window_size: usize,
     embedding_dimensionality: usize,
-    attention_dimensionality: usize,
     head_count: usize,
     layer_count: usize,
 }
@@ -30,7 +29,6 @@ impl Default for SmallLanguageModelConfiguration {
             token_vocabulary: TokenVocabulary::default(),
             context_window_size: 100,
             embedding_dimensionality: 64,
-            attention_dimensionality: 16,
             head_count: 4,
             layer_count: 2,
         }
@@ -56,7 +54,7 @@ impl SmallLanguageModel {
                 &format!("{}_layer_{}", identifier, layer_no),
                 configuration.head_count,
                 configuration.embedding_dimensionality,
-                configuration.attention_dimensionality,
+                configuration.embedding_dimensionality / configuration.head_count,
             ));
         }
         Self {
