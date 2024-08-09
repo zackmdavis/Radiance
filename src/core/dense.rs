@@ -10,7 +10,6 @@ use crate::core::operations::{
 };
 
 pub struct Linear {
-    #[allow(dead_code)]
     identifier: String,
     // TODO: `pub` is dubious, but needed for the demo to still work
     pub weights: Rc<Tensor>,
@@ -83,8 +82,20 @@ impl Linear {
     }
 }
 
+impl Parameterized for Linear {
+    fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
+    fn parameters(&self) -> Vec<Rc<Tensor>> {
+        let mut parameters = Vec::new();
+        parameters.push(self.weights.clone());
+        parameters.push(self.biases.clone());
+        parameters
+    }
+}
+
 pub struct MultiLayerPerceptron {
-    #[allow(dead_code)]
     identifier: String,
     layers: Vec<Linear>,
 }
@@ -121,11 +132,14 @@ impl MultiLayerPerceptron {
 }
 
 impl Parameterized for MultiLayerPerceptron {
+    fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
     fn parameters(&self) -> Vec<Rc<Tensor>> {
         let mut parameters = Vec::new();
         for layer in &self.layers {
-            parameters.push(layer.weights.clone());
-            parameters.push(layer.biases.clone());
+            parameters.extend(layer.parameters());
         }
         parameters
     }

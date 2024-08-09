@@ -217,6 +217,8 @@ pub fn backprop(culmination: Rc<Tensor>) {
 }
 
 pub trait Parameterized {
+    fn identifier(&self) -> &str;
+
     fn parameters(&self) -> Vec<Rc<Tensor>>;
 
     fn parameter_count(&self) -> usize {

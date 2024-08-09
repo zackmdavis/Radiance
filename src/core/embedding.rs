@@ -102,7 +102,6 @@ pub fn sequence_positional_encoding(length: usize, embedding_dimensionality: usi
 }
 
 pub struct TokenEmbedding {
-    #[allow(dead_code)]
     identifier: String,
     weights: Rc<Tensor>,
 }
@@ -141,6 +140,10 @@ impl TokenEmbedding {
 }
 
 impl Parameterized for TokenEmbedding {
+    fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
     fn parameters(&self) -> Vec<Rc<Tensor>> {
         vec![self.weights.clone()]
     }

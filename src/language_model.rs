@@ -36,12 +36,17 @@ impl Default for SmallLanguageModelConfiguration {
 }
 
 pub struct SmallLanguageModel {
+    identifier: String,
     configuration: SmallLanguageModelConfiguration,
     token_embedding: TokenEmbedding,
     attention_layers: Vec<AttentionLayer>,
 }
 
 impl Parameterized for SmallLanguageModel {
+    fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
     fn parameters(&self) -> Vec<Rc<Tensor>> {
         let mut parameters = Vec::new();
         parameters.extend(self.token_embedding.parameters());
@@ -69,6 +74,7 @@ impl SmallLanguageModel {
             ));
         }
         Self {
+            identifier: identifier.to_owned(),
             configuration,
             token_embedding,
             attention_layers,

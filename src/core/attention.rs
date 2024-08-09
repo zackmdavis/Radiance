@@ -12,7 +12,6 @@ use super::operations::{
 use super::{Parameterized, Tensor, TensorBuilder};
 
 pub struct AttentionHead {
-    #[allow(dead_code)]
     identifier: String,
     query_weights: Rc<Tensor>,
     // TODO—add biases
@@ -124,6 +123,10 @@ impl AttentionHead {
 }
 
 impl Parameterized for AttentionHead {
+    fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
     fn parameters(&self) -> Vec<Rc<Tensor>> {
         vec![
             self.query_weights.clone(),
@@ -134,7 +137,6 @@ impl Parameterized for AttentionHead {
 }
 
 pub struct AttentionMultiHead {
-    #[allow(dead_code)]
     identifier: String,
     heads: Vec<AttentionHead>,
     output_weights: Rc<Tensor>,
@@ -192,6 +194,10 @@ impl AttentionMultiHead {
 }
 
 impl Parameterized for AttentionMultiHead {
+    fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
     fn parameters(&self) -> Vec<Rc<Tensor>> {
         let mut parameters = Vec::new();
         for head in &self.heads {
@@ -203,7 +209,6 @@ impl Parameterized for AttentionMultiHead {
 }
 
 pub struct AttentionLayer {
-    #[allow(dead_code)]
     identifier: String,
     attention_multihead: AttentionMultiHead,
     multi_layer_perceptron: MultiLayerPerceptron,
@@ -254,6 +259,10 @@ impl AttentionLayer {
 }
 
 impl Parameterized for AttentionLayer {
+    fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
     fn parameters(&self) -> Vec<Rc<Tensor>> {
         let mut parameters = Vec::new();
         parameters.extend(self.attention_multihead.parameters());
