@@ -10,7 +10,11 @@ approx = "0.5"
 lazy_static = "*"
 ndarray = {git = "https://github.com/rust-ndarray/ndarray", features = ["approx"]}
 ndarray-rand = { git = "https://github.com/rust-ndarray/ndarray" }
+ndarray-npy = "0.8.1"
 num-traits = "*"
 rand = "*"
 rand_distr = "0.4.3"
 topological-sort = "*"
+
+[patch.crates-io]
+ndarray = { git = "https://github.com/rust-ndarray/ndarray.git" }

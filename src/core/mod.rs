@@ -1,4 +1,4 @@
-use std::cell::{Ref, RefCell};
+use std::cell::{Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -16,6 +16,7 @@ pub mod dense;
 pub mod embedding;
 pub mod operations;
 pub mod optimization;
+pub mod serialization;
 
 use self::operations::Operation;
 
@@ -69,6 +70,10 @@ impl Tensor {
 
     pub fn borrow_array(&self) -> Ref<ArrayD<f32>> {
         self.array.borrow()
+    }
+
+    pub fn borrow_array_mut(&self) -> RefMut<ArrayD<f32>> {
+        self.array.borrow_mut()
     }
 
     pub fn unset_gradient(&self) {
