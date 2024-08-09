@@ -9,11 +9,10 @@ use rand_distr::weighted_alias::WeightedAliasIndex;
 
 use crate::core::attention::AttentionLayer;
 use crate::core::embedding::{sequence_positional_encoding, TokenEmbedding, TokenVocabulary};
-use crate::core::{backprop, Parameterized, Tensor, TensorBuilder};
-
 use crate::core::operations::{softmax, Addition, Operation, SoftmaxCrossEntropy};
-
 use crate::core::optimization::{Optimizer, StochasticGradientDescentOptimizer};
+use crate::core::serialization::serialize;
+use crate::core::{backprop, Parameterized, Tensor, TensorBuilder};
 
 pub struct SmallLanguageModelConfiguration {
     token_vocabulary: TokenVocabulary,
@@ -153,6 +152,7 @@ pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
 
     let start_time = time::Instant::now();
     let mut last_status_update = time::Instant::now();
+    let mut last_checkpoint = time::Instant::now();
 
     for context_window in training_tokenstream.windows(network.configuration.context_window_size) {
         // We shift the input sequence by one (padding the beginning with a
@@ -209,6 +209,11 @@ pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
             );
             println!("sample: {:?}", sample_text(&network));
             last_status_update = time::Instant::now();
+        }
+
+        if last_checkpoint.elapsed() > time::Duration::from_secs(60 * 10) {
+            serialize(&network).expect("network should write");
+            last_checkpoint = time::Instant::now();
         }
     }
     network
