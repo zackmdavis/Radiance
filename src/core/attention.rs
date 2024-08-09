@@ -107,12 +107,9 @@ impl AttentionHead {
             Rc::new(TensorBuilder::new((scale_factor * Array::ones((n, n))).into_dyn()).build());
         let scaled_qk_t = Multiplication {}.forward(vec![scale, qk_t]);
 
-        // `tril` chokes on 1×1: https://github.com/rust-ndarray/ndarray/issues/1415
-        let raw_mask = if n == 1 {
-            Array::ones((n, n))
-        } else {
-            Array::ones((n, n)).tril(0)
-        };
+        // replace with `Array::ones((n, n)).tril(0)` when fix for
+        // https://github.com/rust-ndarray/ndarray/issues/1415 is released
+        let raw_mask = Array::from_shape_fn((n, n), |(i, j)| if j > i { 0. } else { 1. });
 
         let mask = Rc::new(TensorBuilder::new(raw_mask.into_dyn()).build());
         let masked = Mask {}.forward(vec![scaled_qk_t, mask]);
