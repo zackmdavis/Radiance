@@ -34,7 +34,10 @@ fn main() {
                 "sample at initialization: {}",
                 language_model::sample_text(&network, vec![0.0])
             );
-            language_model::train_slm(network);
+            language_model::train_slm(
+                network,
+                args.get(2).map(|n| n.parse().expect("arg should be int")),
+            );
         }
         "--continue-training" => {
             let filename = &args[2];
@@ -44,7 +47,7 @@ fn main() {
                 "sample at initialization: {}",
                 language_model::sample_text(&network, vec![0.0])
             );
-            language_model::train_slm(network);
+            language_model::train_slm(network, None);
         }
         "--chat" => {
             let filename = &args[2];

@@ -16,3 +16,6 @@ num-traits = "*"
 rand = "*"
 rand_distr = "0.4.3"
 topological-sort = "*"
+
+[profile.release]
+debug = true

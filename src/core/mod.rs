@@ -1,5 +1,5 @@
 use std::cell::{Ref, RefCell, RefMut};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -158,18 +158,29 @@ struct Origin {
     parents: Vec<Rc<Tensor>>,
 }
 
-fn register_parents(sorter: &mut TopologicalSort<Rc<Tensor>>, child: Rc<Tensor>) {
+fn register_parents(
+    sorter: &mut TopologicalSort<Rc<Tensor>>,
+    child: Rc<Tensor>,
+    visited: &mut HashSet<String>,
+) {
+    // thanks to discussion with Claude Sonnet 3.5 for clarifying why the
+    // original implementation was duplicating work
+    if !visited.insert(child.identifier.clone()) {
+        return;
+    }
+
     if let Some(origin) = &child.origin {
         for parent in &origin.parents {
             sorter.add_dependency(parent.clone(), child.clone());
-            register_parents(sorter, parent.clone());
+            register_parents(sorter, parent.clone(), visited);
         }
     }
 }
 
 fn sorted_computation_graph(end: Rc<Tensor>) -> Vec<Rc<Tensor>> {
     let mut sorter = TopologicalSort::new();
-    register_parents(&mut sorter, end);
+    let mut visited = HashSet::new();
+    register_parents(&mut sorter, end, &mut visited);
     let mut sorted = sorter.collect::<Vec<_>>();
     // We actually want reverse-topological order
     sorted.reverse();

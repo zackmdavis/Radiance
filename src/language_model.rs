@@ -145,7 +145,7 @@ pub fn sample_text(network: &SmallLanguageModel, prompt: Vec<f32>) -> String {
     text.iter().collect()
 }
 
-pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
+pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> SmallLanguageModel {
     let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0004);
 
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
@@ -218,6 +218,12 @@ pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
         if last_checkpoint.elapsed() > time::Duration::from_secs(60 * 10) {
             serialize(&network).expect("network should write");
             last_checkpoint = time::Instant::now();
+        }
+
+        if let Some(step_limit) = max_steps {
+            if optimizer.step_count() > step_limit {
+                break;
+            }
         }
     }
     network
