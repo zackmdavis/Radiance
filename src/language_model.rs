@@ -15,11 +15,11 @@ use crate::core::serialization::serialize;
 use crate::core::{backprop, Parameterized, Tensor, TensorBuilder};
 
 pub struct SmallLanguageModelConfiguration {
-    token_vocabulary: TokenVocabulary,
-    context_window_size: usize,
-    embedding_dimensionality: usize,
-    head_count: usize,
-    layer_count: usize,
+    pub token_vocabulary: TokenVocabulary,
+    pub context_window_size: usize,
+    pub embedding_dimensionality: usize,
+    pub head_count: usize,
+    pub layer_count: usize,
 }
 
 impl Default for SmallLanguageModelConfiguration {
@@ -80,6 +80,10 @@ impl SmallLanguageModel {
         }
     }
 
+    pub fn configuration(&self) -> &SmallLanguageModelConfiguration {
+        &self.configuration
+    }
+
     pub fn forward(&self, input: Rc<Tensor>) -> Rc<Tensor> {
         let sequence_length = input.borrow_array().shape()[0];
         let mut x = self.token_embedding.embed(input);
@@ -114,8 +118,8 @@ pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>)
     *next_token
 }
 
-pub fn sample_text(network: &SmallLanguageModel) -> String {
-    let mut raw_context = vec![0.0];
+pub fn sample_text(network: &SmallLanguageModel, prompt: Vec<f32>) -> String {
+    let mut raw_context = prompt;
     let mut text = Vec::new();
     for _ in 0..network.configuration.context_window_size {
         let input = Rc::new(
@@ -148,7 +152,7 @@ pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
     let training_tokenstream = network
         .configuration
         .token_vocabulary
-        .tokenize(training_megastring);
+        .tokenize(&training_megastring);
 
     let start_time = time::Instant::now();
     let mut last_status_update = time::Instant::now();
@@ -207,7 +211,7 @@ pub fn train_slm(network: SmallLanguageModel) -> SmallLanguageModel {
                 optimizer.step_count(),
                 loss_value
             );
-            println!("sample: {:?}", sample_text(&network));
+            println!("sample: {:?}", sample_text(&network, vec![0.0]));
             last_status_update = time::Instant::now();
         }
 

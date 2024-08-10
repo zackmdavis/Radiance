@@ -32,7 +32,7 @@ impl TokenVocabulary {
         self.token_to_id.len()
     }
 
-    pub fn tokenize(&self, text: String) -> Vec<f32> {
+    pub fn tokenize(&self, text: &str) -> Vec<f32> {
         let mut token_ids = Vec::new();
         for c in text.chars() {
             match self.token_to_id.get(&c) {
