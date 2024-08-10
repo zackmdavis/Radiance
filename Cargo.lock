@@ -168,6 +168,7 @@ version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "087ee1ca8a7c22830c2bba4a96ed8e72ce0968ae944349324d52522f66aa3944"
 dependencies = [
+ "approx",
  "matrixmultiply",
  "num-complex",
  "num-integer",

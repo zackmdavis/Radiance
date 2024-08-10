@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 approx = "0.5"
 lazy_static = "*"
-ndarray = "*"
-ndarray-rand = "*"
+ndarray = {version = "0.16", features = ["approx"]} 
+ndarray-rand = "0.15"
 # just hosting a fork is easier than figuring out how to tell Cargo what version to use
 ndarray-npy = { git = "https://github.com/zackmdavis/ndarray-npy", branch = "ndarray-0.16" }
 num-traits = "*"
