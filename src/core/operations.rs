@@ -145,6 +145,45 @@ impl Operation for MatrixMultiplication {
 }
 
 #[derive(Debug)]
+pub struct SubtractMean {}
+
+impl Operation for SubtractMean {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        let array = inputs[0].borrow_array().clone();
+        // TODO: we really shouldn't have to clone the whole array again here!!
+        // I don't know why `array.shape().clone()` doesn't work
+        let a = array.clone();
+        let shape = a.shape();
+        let mean = array.mean().expect("nontrivial array");
+        let origin = Origin {
+            operation: Box::new(SubtractMean {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(
+            TensorBuilder::new(array - mean * Array::ones(shape))
+                .requires_gradient(true)
+                .origin(origin)
+                .build(),
+        )
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        let array = args[0].borrow_array();
+        let shape = array.shape();
+        // Thanks to Claude Sonnet 3.5 for correcting my gradient calculation;
+        // I had reasoned d/dx_i (x − x̅) = d/dx_i (x − Σ_j x_j/n) and thought
+        // it was going to be 1 − 1/n times the out-gradient, but this neglects
+        // the contribution of the j ≠ i terms.
+        out_gradient - out_gradient.mean().expect("nontrivial array") * Array::ones(shape)
+    }
+}
+
+#[derive(Debug)]
 pub struct RectifiedLinearUnit {}
 
 impl Operation for RectifiedLinearUnit {
@@ -1269,5 +1308,68 @@ mod tests {
         for (&actual, &expected) in input_gradient.iter().zip(expected_gradient.iter()) {
             assert_abs_diff_eq!(actual, expected, epsilon = 0.0001);
         }
+    }
+
+    #[test]
+    fn test_subtract_mean() {
+        // Test by Claude Sonnet 3.5
+        let input = Rc::new(
+            TensorBuilder::new(array![1.0, 2.0, 3.0, 4.0].into_dyn())
+                .identifier("input")
+                .requires_gradient(true)
+                .build(),
+        );
+
+        // Create SubtractMean operation
+        let subtract_mean = SubtractMean {};
+
+        // Perform forward pass
+        let result = subtract_mean.forward(vec![input.clone()]);
+
+        // Check forward pass result
+        assert_abs_diff_eq!(
+            *result.borrow_array(),
+            array![-1.5, -0.5, 0.5, 1.5].into_dyn(),
+            epsilon = 1e-6
+        );
+
+        // Create a dummy gradient for backward pass
+        let out_gradient = array![1.0, 2.0, 3.0, 4.0].into_dyn();
+
+        // Perform backward pass
+        let input_gradient = subtract_mean.backward(&out_gradient, vec![input.clone()], 0);
+
+        // Expected gradient: out_gradient - mean(out_gradient)
+        let expected_gradient = array![-1.5, -0.5, 0.5, 1.5].into_dyn();
+
+        // Check backward pass result
+        assert_abs_diff_eq!(input_gradient, expected_gradient, epsilon = 1e-6);
+
+        // Test with different input shape
+        let input_2d = Rc::new(
+            TensorBuilder::new(array![[1.0, 2.0], [3.0, 4.0]].into_dyn())
+                .identifier("input_2d")
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let result_2d = subtract_mean.forward(vec![input_2d.clone()]);
+
+        // Check 2D forward pass result
+        assert_abs_diff_eq!(
+            *result_2d.borrow_array(),
+            array![[-1.5, -0.5], [0.5, 1.5]].into_dyn(),
+            epsilon = 1e-6
+        );
+
+        // 2D gradient
+        let out_gradient_2d = array![[1.0, 2.0], [3.0, 4.0]].into_dyn();
+        let input_gradient_2d = subtract_mean.backward(&out_gradient_2d, vec![input_2d.clone()], 0);
+
+        // Expected 2D gradient
+        let expected_gradient_2d = array![[-1.5, -0.5], [0.5, 1.5]].into_dyn();
+
+        // Check 2D backward pass result
+        assert_abs_diff_eq!(input_gradient_2d, expected_gradient_2d, epsilon = 1e-6);
     }
 }
