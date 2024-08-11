@@ -81,6 +81,30 @@ impl Operation for Multiplication {
 }
 
 #[derive(Debug)]
+pub struct Exponentiation {}
+
+impl Operation for Exponentiation {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        assert!(inputs.len() == 1, "unary operation expected");
+        let exp = inputs[0].borrow_array().exp();
+        let origin = Origin {
+            operation: Box::new(Exponentiation {}),
+            parents: inputs.clone(),
+        };
+        Rc::new(TensorBuilder::new(exp).origin(origin).build())
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        out_gradient * args[0].borrow_array().exp()
+    }
+}
+
+#[derive(Debug)]
 pub struct MatrixMultiplication {}
 
 impl Operation for MatrixMultiplication {
@@ -1339,46 +1363,51 @@ mod tests {
     fn test_normalize() {
         // In [1]: import torch
         //    ...: x = torch.tensor(
-        //    ...:     [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]],
+        //    ...:     [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]],
         //    ...:     requires_grad=True,
         //    ...: )
         //    ...: layernorm = torch.nn.LayerNorm(x.shape, elementwise_affine=False)
         //    ...: y = layernorm(x)
-        //    ...: loss = (y**2).sum()
-        //    ...: loss.backward()
+        //    ...: exp_y = y.exp()
+        //    ...: exp_y.backward(torch.ones_like(x))
         //    ...:
         let x = Rc::new(
-            TensorBuilder::new(
-                array![
-                    [1.0, 2.0, 3.0, 4.0],
-                    [5.0, 6.0, 7.0, 8.0],
-                    [9.0, 10.0, 11.0, 12.0]
-                ]
-                .into_dyn(),
-            )
-            .requires_gradient(true)
-            .build(),
+            TensorBuilder::new(array![[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]].into_dyn())
+                .requires_gradient(true)
+                .build(),
         );
         let y = Normalize::new(1e-5).forward(vec![x.clone()]);
+        let exp_y = Exponentiation {}.forward(vec![y.clone()]);
+        backprop(exp_y);
+
         // In [2]: y
         // Out[2]:
-        // tensor([[-1.5933, -1.3036, -1.0139, -0.7242],
-        //         [-0.4345, -0.1448,  0.1448,  0.4345],
-        //         [ 0.7242,  1.0139,  1.3036,  1.5933]],
+        // tensor([[-1.5275, -1.0911, -0.6547, -0.2182],
+        //         [ 0.2182,  0.6547,  1.0911,  1.5275]],
         //        grad_fn=<NativeLayerNormBackward0>)
         assert_abs_diff_eq!(y.borrow_array().sum(), 0., epsilon = 0.0001);
         assert_abs_diff_eq!(
             *y.borrow_array(),
             array![
-                [-1.5933, -1.3036, -1.0139, -0.7242],
-                [-0.4345, -0.1448, 0.1448, 0.4345],
-                [0.7242, 1.0139, 1.3036, 1.5933]
+                [-1.5275, -1.0911, -0.6547, -0.2182],
+                [0.2182, 0.6547, 1.0911, 1.5275]
             ]
             .into_dyn(),
             epsilon = 0.0001
         );
-        // TODO: test backwards function; probably pick a different example
-        // that will give me larger gradients
+        // In [3]: x.grad
+        // Out[3]:
+        // tensor([[ 0.2894,  0.0888, -0.0835, -0.2119],
+        //         [-0.2723, -0.2278, -0.0206,  0.4380]])
+        assert_abs_diff_eq!(
+            x.gradient.borrow().as_ref().expect("gradient must exist"),
+            &array![
+                [0.2894, 0.0888, -0.0835, -0.2119],
+                [-0.2723, -0.2278, -0.0206, 0.4380]
+            ]
+            .into_dyn(),
+            epsilon = 0.0001
+        );
     }
 
     #[test]
