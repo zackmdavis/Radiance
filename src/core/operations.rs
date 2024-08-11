@@ -184,6 +184,67 @@ impl Operation for SubtractMean {
 }
 
 #[derive(Debug)]
+pub struct DivideByStandardDeviation {
+    ε: f32,
+}
+
+impl DivideByStandardDeviation {
+    pub fn new(ε: f32) -> Self {
+        Self { ε }
+    }
+}
+
+impl Operation for DivideByStandardDeviation {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        let array = inputs[0].borrow_array().clone();
+        // TODO: as with `SubtractMean`, this really shouldn't need a clone!
+        let a = array.clone();
+        let shape = a.shape();
+        let variance = array.var(0.);
+        println!("variance: {}", variance);
+        let denominator: f32 = (variance + self.ε).sqrt();
+        println!("denominator: {}", denominator);
+        let result = array * ((1. / denominator) * Array::ones(shape));
+        println!("{:?}", result);
+        let origin = Origin {
+            operation: Box::new(DivideByStandardDeviation { ε: self.ε }),
+            parents: inputs.clone(),
+        };
+        Rc::new(
+            TensorBuilder::new(result)
+                .requires_gradient(true)
+                .origin(origin)
+                .build(),
+        )
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        // WRONG (i.e., PyTorch seems to disagree) TODO: make correct
+
+        // d/dx_i(x/√(var(x) + ε)) = 1/√(var(x) + ε) + x · (d/dx_i)(1/√(var(x) + ε)).
+        // But (d/dx_i)(1/√(var(x) + ε)) is −½(var(x) + ε)^(−3/2) · (d/dx_i)(var(x)).
+        // And (d/dx_i)(var(x)) = (d/dx_i) E(x²) − E(x)²
+        // = (d/dx_i) Σ_j x_i²/n − (Σ_k x_k/n)² = (2/n)(x_i − E(x)).
+        // So we have
+        // 1/√(var(x) + ε) − (x/n)(x_i − E(x))(var(x) + ε)^(−3/2)
+        // = 1/√(var(x) + ε) − (x² − x·E(x))/(n(var(x) + ε)^(3/2))
+        let array = args[0].borrow_array().clone();
+        let shape = array.shape();
+        let n = shape.iter().product::<usize>() as f32;
+        let variance = array.var(0.);
+        let mean = array.mean().expect("nontrivial array");
+        let var_plus_eps = variance + self.ε;
+        out_gradient * (1. / var_plus_eps.sqrt() * Array::ones(shape))
+            - (array.powi(2) - (mean * array)) / (n * var_plus_eps.powf(3. / 2.))
+    }
+}
+
+#[derive(Debug)]
 pub struct RectifiedLinearUnit {}
 
 impl Operation for RectifiedLinearUnit {
@@ -1372,4 +1433,41 @@ mod tests {
         // Check 2D backward pass result
         assert_abs_diff_eq!(input_gradient_2d, expected_gradient_2d, epsilon = 1e-6);
     }
+
+    #[test]
+    fn test_divide_by_standard_deviation_forward() {
+        let input = Rc::new(
+            TensorBuilder::new(array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]].into_dyn())
+                .requires_gradient(true)
+                .build(),
+        );
+        let result = DivideByStandardDeviation::new(1e-6).forward(vec![input.clone()]);
+        // In [1]: import torch
+        //    ...: def divide_by_standard_deviation(x, eps=1e-6):
+        //    ...:     return x / torch.sqrt(x.var(correction=0) + eps)
+        //    ...:
+        //    ...: x = torch.tensor([[1., 2., 3.], [4., 5., 6.]], requires_grad=True)
+        //    ...: y = divide_by_standard_deviation(x)
+        //    ...:
+        //    ...: print("y is\n", y)
+        //    ...:
+        //    ...: y.backward(torch.ones_like(x))
+        //    ...:
+        //    ...: print("∇x is\n", x.grad)
+        //    ...:
+        // y is
+        //  tensor([[0.5855, 1.1711, 1.7566],
+        //         [2.3422, 2.9277, 3.5132]], grad_fn=<DivBackward0>)
+        // ∇x is
+        //  tensor([[ 2.3422,  1.6395,  0.9369],
+        //         [ 0.2342, -0.4684, -1.1711]])
+        let expected_output = array![[0.5855, 1.1711, 1.7566], [2.3422, 2.9277, 3.5132]];
+        assert_abs_diff_eq!(
+            *result.borrow_array(),
+            expected_output.into_dyn(),
+            epsilon = 1e-4
+        );
+    }
+
+    // TODO backward test for DivideByStandardDeviation
 }
