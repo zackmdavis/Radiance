@@ -326,6 +326,70 @@ impl Operation for ConcatenateColumns {
 }
 
 #[derive(Debug)]
+pub struct Normalize {
+    ε: f32,
+}
+
+impl Normalize {
+    fn new(ε: f32) -> Self {
+        Self { ε }
+    }
+}
+
+impl Operation for Normalize {
+    fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
+        let x = inputs[0].borrow_array().clone();
+        let μ = x.mean().expect("mean exists");
+        let σ2 = x.var(0.);
+        let normalized = (x - μ) / (σ2 + self.ε).sqrt();
+        let origin = Origin {
+            operation: Box::new(Normalize::new(self.ε)),
+            parents: inputs.clone(),
+        };
+        Rc::new(
+            TensorBuilder::new(normalized)
+                .requires_gradient(true)
+                .origin(origin)
+                .build(),
+        )
+    }
+
+    fn backward(
+        &self,
+        out_gradient: &ArrayD<f32>,
+        args: Vec<Rc<Tensor>>,
+        _arg_index: usize,
+    ) -> ArrayD<f32> {
+        // Thanks to Claude Sonnet 3.5 for tutoring
+        //
+        // y = (x − E[x])/√(var(x) + ε)
+        // dy_i/dx_j = d/dx_j (x − E[x])/√(var(x) + ε) + (x − E[x]) · d/dx_i (var(x) + ε)^(−½)
+        // = (δ_ij − 1/n)/√(var(x) + ε) + (x − E[x]) · −½ (var(x) + ε)^(−3/2) · 2/n(x_j − E[x])
+        // = (δ_ij − 1/n)/√(var(x) + ε) − 1/n · (x − E[x]) · (x_j − E[x]) · (var(x) + ε)^(−3/2)
+        let x = args[0].borrow_array().clone();
+        let σ2 = x.var(0.);
+        let var_plus_eps = σ2 + self.ε;
+        // But matrix-multiplying (δ_ij − 1/n) with a vector v⃗ is v⃗− v̅.
+        //
+        // (Out-gradient is mathematically a vector, even if it represents the
+        // entries of a tensor with a different shape; we don't need to
+        // explicitly compute the matrix of partial derivatives, &c.)
+        let gradient_term_1 =
+            (out_gradient - out_gradient.mean().expect("mean exists")) / var_plus_eps.sqrt();
+        // Then the Jacobian-times-out-gradient expression dy_i/dx_j · dL/dy_i
+        // would be cc⊤g where c = (x − E[x]), g is the out-gradient, and I'm
+        // ignoring a scalar factor, but we can't afford to compute the outer
+        // product cc⊤, so it's important that the evaluation goes c(c⊤g).
+        let n = x.len() as f32;
+        let x_centered = x.clone() - x.mean().expect("mean exists");
+        let scale = 1. / (n * var_plus_eps.powf(3. / 2.));
+        let gradient_term_2 =
+            scale * x_centered.clone() * (x_centered.clone() * out_gradient).sum();
+        gradient_term_1 - gradient_term_2
+    }
+}
+
+#[derive(Debug)]
 pub struct SquaredError {}
 
 impl Operation for SquaredError {
@@ -1269,6 +1333,52 @@ mod tests {
         for (&actual, &expected) in input_gradient.iter().zip(expected_gradient.iter()) {
             assert_abs_diff_eq!(actual, expected, epsilon = 0.0001);
         }
+    }
+
+    #[test]
+    fn test_normalize() {
+        // In [1]: import torch
+        //    ...: x = torch.tensor(
+        //    ...:     [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]],
+        //    ...:     requires_grad=True,
+        //    ...: )
+        //    ...: layernorm = torch.nn.LayerNorm(x.shape, elementwise_affine=False)
+        //    ...: y = layernorm(x)
+        //    ...: loss = (y**2).sum()
+        //    ...: loss.backward()
+        //    ...:
+        let x = Rc::new(
+            TensorBuilder::new(
+                array![
+                    [1.0, 2.0, 3.0, 4.0],
+                    [5.0, 6.0, 7.0, 8.0],
+                    [9.0, 10.0, 11.0, 12.0]
+                ]
+                .into_dyn(),
+            )
+            .requires_gradient(true)
+            .build(),
+        );
+        let y = Normalize::new(1e-5).forward(vec![x.clone()]);
+        // In [2]: y
+        // Out[2]:
+        // tensor([[-1.5933, -1.3036, -1.0139, -0.7242],
+        //         [-0.4345, -0.1448,  0.1448,  0.4345],
+        //         [ 0.7242,  1.0139,  1.3036,  1.5933]],
+        //        grad_fn=<NativeLayerNormBackward0>)
+        assert_abs_diff_eq!(y.borrow_array().sum(), 0., epsilon = 0.0001);
+        assert_abs_diff_eq!(
+            *y.borrow_array(),
+            array![
+                [-1.5933, -1.3036, -1.0139, -0.7242],
+                [-0.4345, -0.1448, 0.1448, 0.4345],
+                [0.7242, 1.0139, 1.3036, 1.5933]
+            ]
+            .into_dyn(),
+            epsilon = 0.0001
+        );
+        // TODO: test backwards function; probably pick a different example
+        // that will give me larger gradients
     }
 
     #[test]
