@@ -224,23 +224,24 @@ impl Operation for DivideByStandardDeviation {
         args: Vec<Rc<Tensor>>,
         _arg_index: usize,
     ) -> ArrayD<f32> {
-        // WRONG (i.e., PyTorch seems to disagree) TODO: make correct
+        // still wrong?!
 
         // d/dx_i(x/√(var(x) + ε)) = 1/√(var(x) + ε) + x · (d/dx_i)(1/√(var(x) + ε)).
         // But (d/dx_i)(1/√(var(x) + ε)) is −½(var(x) + ε)^(−3/2) · (d/dx_i)(var(x)).
         // And (d/dx_i)(var(x)) = (d/dx_i) E(x²) − E(x)²
         // = (d/dx_i) Σ_j x_i²/n − (Σ_k x_k/n)² = (2/n)(x_i − E(x)).
         // So we have
-        // 1/√(var(x) + ε) − (x/n)(x_i − E(x))(var(x) + ε)^(−3/2)
-        // = 1/√(var(x) + ε) − (x² − x·E(x))/(n(var(x) + ε)^(3/2))
-        let array = args[0].borrow_array().clone();
-        let shape = array.shape();
+        // 1/√(var(x) + ε) − (x/n)(x − μ)(var(x) + ε)^(−3/2)
+        let x = args[0].borrow_array().clone();
+        let shape = x.shape();
         let n = shape.iter().product::<usize>() as f32;
-        let variance = array.var(0.);
-        let mean = array.mean().expect("nontrivial array");
+        let variance = x.var(0.);
+        let mean = x.mean().expect("nontrivial array");
         let var_plus_eps = variance + self.ε;
-        out_gradient * (1. / var_plus_eps.sqrt() * Array::ones(shape))
-            - (array.powi(2) - (mean * array)) / (n * var_plus_eps.powf(3. / 2.))
+        // auto-broadcasting is contrary to the moral law, but it does make
+        // this more readable
+        out_gradient * (1. / var_plus_eps.sqrt())
+            - (x.clone() / n) * (x - mean) * var_plus_eps.powf(-3. / 2.)
     }
 }
 
@@ -1469,5 +1470,35 @@ mod tests {
         );
     }
 
-    // TODO backward test for DivideByStandardDeviation
+    #[ignore]
+    #[test]
+    fn test_divide_by_standard_deviation_backward() {
+        let input = Rc::new(
+            TensorBuilder::new(array![[1.0, 1.0, 2.0], [1.0, 1.0, 1.0]].into_dyn())
+                .requires_gradient(true)
+                .build(),
+        );
+
+        let gradient = DivideByStandardDeviation::new(1e-6).backward(
+            &Array::ones((2, 3)).into_dyn(),
+            vec![input],
+            0,
+        );
+
+        let expected_gradient =
+            array![[6.4398, 6.4398, -16.0995], [6.4398, 6.4398, 6.4398]].into_dyn();
+        assert_abs_diff_eq!(gradient, expected_gradient, epsilon = 0.0001)
+    }
+
+    #[test]
+    fn test_convincing_myself_that_ndarray_broadcasting_works() {
+        let ones: ArrayD<f32> = Array::ones((3, 4)).into_dyn();
+        let zeros: ArrayD<f32> = Array::zeros((3, 4)).into_dyn();
+        assert_eq!(ones.clone() - 1., zeros);
+
+        let threes: ArrayD<f32> = Array::from_shape_vec((3, 4), vec![3.; 12])
+            .expect("array should compile")
+            .into_dyn();
+        assert_eq!(threes / 3., ones);
+    }
 }
