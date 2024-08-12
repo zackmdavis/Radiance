@@ -350,28 +350,42 @@ impl Operation for ConcatenateColumns {
 }
 
 #[derive(Debug)]
-pub struct Normalize {
+pub struct NormalizeRows {
     ε: f32,
 }
 
-impl Normalize {
+impl NormalizeRows {
     fn new(ε: f32) -> Self {
         Self { ε }
     }
 }
 
-impl Operation for Normalize {
+impl Operation for NormalizeRows {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
-        let x = inputs[0].borrow_array().clone();
-        let μ = x.mean().expect("mean exists");
-        let σ2 = x.var(0.);
-        let normalized = (x - μ) / (σ2 + self.ε).sqrt();
+        assert!(inputs.len() == 1, "unary operation expected");
+        let array = inputs[0]
+            .array
+            .borrow()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let mut normalized = Array2::zeros((0, array.shape()[1]));
+        for row in array.rows() {
+            let x = row.to_owned();
+            let μ = x.mean().expect("mean exists");
+            let σ2 = x.var(0.);
+            let normalized_row = (x - μ) / (σ2 + self.ε).sqrt();
+            normalized
+                .push_row(normalized_row.view())
+                .expect("row should push");
+        }
+
         let origin = Origin {
-            operation: Box::new(Normalize::new(self.ε)),
+            operation: Box::new(NormalizeRows::new(self.ε)),
             parents: inputs.clone(),
         };
         Rc::new(
-            TensorBuilder::new(normalized)
+            TensorBuilder::new(normalized.into_dyn())
                 .requires_gradient(true)
                 .origin(origin)
                 .build(),
@@ -384,32 +398,57 @@ impl Operation for Normalize {
         args: Vec<Rc<Tensor>>,
         _arg_index: usize,
     ) -> ArrayD<f32> {
-        // Thanks to Claude Sonnet 3.5 for tutoring
-        //
-        // y = (x − E[x])/√(var(x) + ε)
-        // dy_i/dx_j = d/dx_j (x − E[x])/√(var(x) + ε) + (x − E[x]) · d/dx_i (var(x) + ε)^(−½)
-        // = (δ_ij − 1/n)/√(var(x) + ε) + (x − E[x]) · −½ (var(x) + ε)^(−3/2) · 2/n(x_j − E[x])
-        // = (δ_ij − 1/n)/√(var(x) + ε) − 1/n · (x − E[x]) · (x_j − E[x]) · (var(x) + ε)^(−3/2)
-        let x = args[0].borrow_array().clone();
-        let σ2 = x.var(0.);
-        let var_plus_eps = σ2 + self.ε;
-        // But matrix-multiplying (δ_ij − 1/n) with a vector v⃗ is v⃗− v̅.
-        //
-        // (Out-gradient is mathematically a vector, even if it represents the
-        // entries of a tensor with a different shape; we don't need to
-        // explicitly compute the matrix of partial derivatives, &c.)
-        let gradient_term_1 =
-            (out_gradient - out_gradient.mean().expect("mean exists")) / var_plus_eps.sqrt();
-        // Then the Jacobian-times-out-gradient expression dy_i/dx_j · dL/dy_i
-        // would be cc⊤g where c = (x − E[x]), g is the out-gradient, and I'm
-        // ignoring a scalar factor, but we can't afford to compute the outer
-        // product cc⊤, so it's important that the evaluation goes c(c⊤g).
-        let n = x.len() as f32;
-        let x_centered = x.clone() - x.mean().expect("mean exists");
-        let scale = 1. / (n * var_plus_eps.powf(3. / 2.));
-        let gradient_term_2 =
-            scale * x_centered.clone() * (x_centered.clone() * out_gradient).sum();
-        gradient_term_1 - gradient_term_2
+        let array = args[0]
+            .borrow_array()
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let out_gradient = out_gradient
+            .clone()
+            .into_dimensionality::<Ix2>()
+            .expect("two-dimensional");
+        let mut gradients = Array2::zeros((0, array.shape()[1]));
+
+        for i in 0..array.shape()[0] {
+            // Thanks to Claude Sonnet 3.5 for tutoring
+            //
+            // y = (x − E[x])/√(var(x) + ε)
+            // dy_i/dx_j = d/dx_j (x − E[x])/√(var(x) + ε) + (x − E[x]) · d/dx_i (var(x) + ε)^(−½)
+            // = (δ_ij − 1/n)/√(var(x) + ε) + (x − E[x]) · −½ (var(x) + ε)^(−3/2) · 2/n(x_j − E[x])
+            // = (δ_ij − 1/n)/√(var(x) + ε) − 1/n · (x − E[x]) · (x_j − E[x]) · (var(x) + ε)^(−3/2)
+            let x = array.row(i).to_owned();
+            let σ2 = x.var(0.);
+            let var_plus_eps = σ2 + self.ε;
+            // But matrix-multiplying (δ_ij − 1/n) with a vector v⃗ is v⃗− v̅.
+            //
+            // (Out-gradient is mathematically a vector, even if it represents the
+            // entries of a tensor with a different shape; we don't need to
+            // explicitly compute the matrix of partial derivatives, &c.)
+            let out_gradient_row = out_gradient.row(i).to_owned();
+            let gradient_term_1 = (out_gradient_row.clone()
+                - out_gradient_row.mean().expect("mean exists"))
+                / var_plus_eps.sqrt();
+
+            // Then the Jacobian-times-out-gradient expression dy_i/dx_j · dL/dy_i
+            // would be cc⊤g where c = (x − E[x]), g is the out-gradient, and I'm
+            // ignoring a scalar factor, but we can't afford to compute the outer
+            // product cc⊤, so it's important that the evaluation goes c(c⊤g).
+            let n = x.len() as f32;
+            let x_centered = x.clone() - x.mean().expect("mean exists");
+            let scale = 1. / (n * var_plus_eps.powf(3. / 2.));
+            let gradient_term_2 =
+                scale * x_centered.clone() * (x_centered.clone() * out_gradient_row).sum();
+            let gradient = gradient_term_1 - gradient_term_2;
+            gradients
+                .push_row(
+                    gradient
+                        .into_dimensionality::<Ix1>()
+                        .expect("one-dimensional")
+                        .view(),
+                )
+                .expect("row should push");
+        }
+        gradients.into_dyn()
     }
 }
 
@@ -573,7 +612,7 @@ impl Operation for SoftmaxRows {
             .clone()
             .into_dimensionality::<Ix2>()
             .expect("two-dimensional");
-        // XXX: redoing the forward fn inside of the backward fn has dubious
+        // XXX? redoing the forward fn inside of the backward fn has questionable
         // performance implications
         let mut softmaxed = Array2::zeros((0, x.shape()[1]));
         for row in x.rows() {
@@ -1362,48 +1401,48 @@ mod tests {
     #[test]
     fn test_normalize() {
         // In [1]: import torch
-        //    ...: x = torch.tensor(
-        //    ...:     [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]],
-        //    ...:     requires_grad=True,
+        //    ...: x = torch.tensor([[1., 2., 3., 4., 5., 6.], [2., 4., 8., 16., 32., 64.]], requires_grad=True
         //    ...: )
-        //    ...: layernorm = torch.nn.LayerNorm(x.shape, elementwise_affine=False)
+        //    ...: layernorm = torch.nn.LayerNorm((6,), elementwise_affine=False)
         //    ...: y = layernorm(x)
         //    ...: exp_y = y.exp()
         //    ...: exp_y.backward(torch.ones_like(x))
-        //    ...:
         let x = Rc::new(
-            TensorBuilder::new(array![[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]].into_dyn())
-                .requires_gradient(true)
-                .build(),
+            TensorBuilder::new(
+                array![[1., 2., 3., 4., 5., 6.], [2., 4., 8., 16., 32., 64.]].into_dyn(),
+            )
+            .requires_gradient(true)
+            .build(),
         );
-        let y = Normalize::new(1e-5).forward(vec![x.clone()]);
+        let y = NormalizeRows::new(1e-5).forward(vec![x.clone()]);
         let exp_y = Exponentiation {}.forward(vec![y.clone()]);
         backprop(exp_y);
 
         // In [2]: y
         // Out[2]:
-        // tensor([[-1.5275, -1.0911, -0.6547, -0.2182],
-        //         [ 0.2182,  0.6547,  1.0911,  1.5275]],
+        // tensor([[-1.4638, -0.8783, -0.2928,  0.2928,  0.8783,  1.4638],
+        //         [-0.8773, -0.7850, -0.6003, -0.2309,  0.5079,  1.9856]],
         //        grad_fn=<NativeLayerNormBackward0>)
         assert_abs_diff_eq!(y.borrow_array().sum(), 0., epsilon = 0.0001);
         assert_abs_diff_eq!(
             *y.borrow_array(),
             array![
-                [-1.5275, -1.0911, -0.6547, -0.2182],
-                [0.2182, 0.6547, 1.0911, 1.5275]
+                [-1.4638, -0.8783, -0.2928, 0.2928, 0.8783, 1.4638],
+                [-0.8773, -0.7850, -0.6003, -0.2309, 0.5079, 1.9856]
             ]
             .into_dyn(),
             epsilon = 0.0001
         );
         // In [3]: x.grad
         // Out[3]:
-        // tensor([[ 0.2894,  0.0888, -0.0835, -0.2119],
-        //         [-0.2723, -0.2278, -0.0206,  0.4380]])
+        // tensor([[ 0.3423, -0.0020, -0.2605, -0.3648, -0.1923,  0.4773],
+        //         [ 0.0283,  0.0202,  0.0044, -0.0242, -0.0641,  0.0354]])
+
         assert_abs_diff_eq!(
             x.gradient.borrow().as_ref().expect("gradient must exist"),
             &array![
-                [0.2894, 0.0888, -0.0835, -0.2119],
-                [-0.2723, -0.2278, -0.0206, 0.4380]
+                [0.3423, -0.0020, -0.2605, -0.3648, -0.1923, 0.4773],
+                [0.0283, 0.0202, 0.0044, -0.0242, -0.0641, 0.0354]
             ]
             .into_dyn(),
             epsilon = 0.0001
