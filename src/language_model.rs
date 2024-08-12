@@ -27,10 +27,10 @@ impl Default for SmallLanguageModelConfiguration {
     fn default() -> Self {
         Self {
             token_vocabulary: TokenVocabulary::default(),
-            context_window_size: 140, // like vintage Twitter
-            embedding_dimensionality: 64,
+            context_window_size: 256,
+            embedding_dimensionality: 128,
             head_count: 4,
-            layer_count: 6,
+            layer_count: 4,
         }
     }
 }
