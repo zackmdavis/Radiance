@@ -313,19 +313,27 @@ impl Operation for Transpose {
 }
 
 #[derive(Debug)]
-pub struct ConcatenateColumns {}
+pub struct Concatenate {
+    axis: usize,
+}
 
-impl Operation for ConcatenateColumns {
+impl Concatenate {
+    pub fn new(axis: usize) -> Self {
+        Self { axis }
+    }
+}
+
+impl Operation for Concatenate {
     fn forward(&self, inputs: Vec<Rc<Tensor>>) -> Rc<Tensor> {
         let arrays = inputs
             .iter()
             .map(|t| t.array.borrow().clone())
             .collect::<Vec<_>>();
         let array_views = arrays.iter().map(|a| a.view()).collect::<Vec<_>>();
-        let catted =
-            ndarray::concatenate(Axis(1), array_views.as_slice()).expect("shapes should cat");
+        let catted = ndarray::concatenate(Axis(self.axis), array_views.as_slice())
+            .expect("shapes should cat");
         let origin = Origin {
-            operation: Box::new(ConcatenateColumns {}),
+            operation: Box::new(Concatenate { axis: self.axis }),
             parents: inputs.clone(),
         };
         Rc::new(TensorBuilder::new(catted.into_dyn()).origin(origin).build())
@@ -337,15 +345,25 @@ impl Operation for ConcatenateColumns {
         args: Vec<Rc<Tensor>>,
         arg_index: usize,
     ) -> ArrayD<f32> {
-        let widths = args
+        let thicknesses = args
             .iter()
-            .map(|t| t.array.borrow().shape()[1])
+            .map(|t| t.array.borrow().shape()[self.axis])
             .collect::<Vec<_>>();
-        let columns_before: usize = widths[..arg_index].iter().sum();
-        out_gradient
-            .slice(s![.., columns_before..columns_before + widths[arg_index]])
-            .to_owned()
-            .into_dyn()
+        let rods_before: usize = thicknesses[..arg_index].iter().sum();
+        match self.axis {
+            // TODO: there's probably a more general way to say this, but it's
+            // not our concern now; Claude Sonnet 3.5 suggests using either
+            // SliceInfo or slice_axis
+            0 => out_gradient
+                .slice(s![rods_before..rods_before + thicknesses[arg_index], ..])
+                .to_owned()
+                .into_dyn(),
+            1 => out_gradient
+                .slice(s![.., rods_before..rods_before + thicknesses[arg_index]])
+                .to_owned()
+                .into_dyn(),
+            _ => panic!("only axes 0 and 1 supported for now"),
+        }
     }
 }
 
@@ -1136,25 +1154,46 @@ mod tests {
                 .requires_gradient(true)
                 .build(),
         );
-        let result = ConcatenateColumns {}.forward(vec![ta, tb]);
-        let result_array = result.array.borrow();
+
+        let rowcat_result = Concatenate::new(0).forward(vec![ta.clone(), tb.clone()]);
+        let rowcat_result_array = rowcat_result.array.borrow();
         assert_eq!(
-            *result_array,
-            array![[1.0, 2.0, 4.0, 5.0], [3.0, 4.0, 6.0, 7.0]].into_dyn()
+            *rowcat_result_array,
+            array![[1.0, 2.0], [3.0, 4.0], [4.0, 5.0], [6.0, 7.0]].into_dyn()
         );
-        let out_gradient = array![[1., 2., 3., 4.], [5., 6., 7., 8.]].into_dyn();
-        let back_0 = ConcatenateColumns {}.backward(
-            &out_gradient,
-            result.origin.as_ref().unwrap().parents.clone(),
+        let rowcat_out_gradient = array![[1., 2.], [3., 4.], [5., 6.], [7., 8.]].into_dyn();
+        let rowcat_back_0 = Concatenate::new(0).backward(
+            &rowcat_out_gradient,
+            rowcat_result.origin.as_ref().unwrap().parents.clone(),
             0,
         );
-        let back_1 = ConcatenateColumns {}.backward(
-            &out_gradient,
-            result.origin.as_ref().unwrap().parents.clone(),
+        let rowcat_back_1 = Concatenate::new(0).backward(
+            &rowcat_out_gradient,
+            rowcat_result.origin.as_ref().unwrap().parents.clone(),
             1,
         );
-        assert_eq!(back_0, array![[1., 2.], [5., 6.]].into_dyn());
-        assert_eq!(back_1, array![[3., 4.], [7., 8.]].into_dyn());
+        assert_eq!(rowcat_back_0, array![[1., 2.], [3., 4.]].into_dyn());
+        assert_eq!(rowcat_back_1, array![[5., 6.], [7., 8.]].into_dyn());
+
+        let colcat_result = Concatenate::new(1).forward(vec![ta, tb]);
+        let colcat_result_array = colcat_result.array.borrow();
+        assert_eq!(
+            *colcat_result_array,
+            array![[1.0, 2.0, 4.0, 5.0], [3.0, 4.0, 6.0, 7.0]].into_dyn()
+        );
+        let colcat_out_gradient = array![[1., 2., 3., 4.], [5., 6., 7., 8.]].into_dyn();
+        let colcat_back_0 = Concatenate::new(1).backward(
+            &colcat_out_gradient,
+            colcat_result.origin.as_ref().unwrap().parents.clone(),
+            0,
+        );
+        let colcat_back_1 = Concatenate::new(1).backward(
+            &colcat_out_gradient,
+            colcat_result.origin.as_ref().unwrap().parents.clone(),
+            1,
+        );
+        assert_eq!(colcat_back_0, array![[1., 2.], [5., 6.]].into_dyn());
+        assert_eq!(colcat_back_1, array![[3., 4.], [7., 8.]].into_dyn());
     }
 
     #[test]

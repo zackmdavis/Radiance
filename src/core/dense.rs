@@ -6,7 +6,7 @@ use ndarray_rand::RandomExt;
 
 use super::{Parameterized, Tensor, TensorBuilder};
 use crate::core::operations::{
-    Addition, ConcatenateColumns, LeakyRectifiedLinearUnit, MatrixMultiplication, Operation,
+    Addition, Concatenate, LeakyRectifiedLinearUnit, MatrixMultiplication, Operation,
 };
 
 pub struct Linear {
@@ -76,7 +76,7 @@ impl Linear {
         let product = MatrixMultiplication {}.forward(vec![self.weights.clone(), input.clone()]);
         // If input isn't a column vector, we need to broadcast the biases
         let width = input.borrow_array().shape()[1];
-        let bias = ConcatenateColumns {}.forward(vec![self.biases.clone(); width]);
+        let bias = Concatenate::new(1).forward(vec![self.biases.clone(); width]);
         let sum = Addition {}.forward(vec![product, bias]);
         sum
     }

@@ -6,8 +6,8 @@ use ndarray_rand::RandomExt;
 
 use super::dense::MultiLayerPerceptron;
 use super::operations::{
-    Addition, ConcatenateColumns, Mask, MatrixMultiplication, Multiplication, Operation,
-    SoftmaxRows, Transpose,
+    Addition, Concatenate, Mask, MatrixMultiplication, Multiplication, Operation,
+    SoftmaxRows, Transpose
 };
 use super::{Parameterized, Tensor, TensorBuilder};
 
@@ -185,7 +185,7 @@ impl AttentionMultiHead {
             .iter()
             .map(|head| head.forward(x.clone()))
             .collect::<Vec<_>>();
-        let h = ConcatenateColumns {}.forward(hs);
+        let h = Concatenate::new(1).forward(hs);
         MatrixMultiplication {}.forward(vec![h, self.output_weights.clone()])
     }
 }
