@@ -2,6 +2,7 @@ use std::fs;
 use std::rc::Rc;
 use std::time;
 
+use chrono;
 use ndarray::prelude::*;
 use rand::prelude::*;
 
@@ -10,7 +11,7 @@ use rand_distr::weighted_alias::WeightedAliasIndex;
 use crate::core::attention::AttentionLayer;
 use crate::core::embedding::{sequence_positional_encoding, TokenEmbedding, TokenVocabulary};
 use crate::core::operations::{softmax, Addition, Operation, SoftmaxCrossEntropy};
-use crate::core::optimization::{Optimizer, StochasticGradientDescentOptimizer};
+use crate::core::optimization::{AdaptiveMomentEstimationOptimizer, Optimizer};
 use crate::core::serialization::serialize;
 use crate::core::{backprop, Parameterized, Tensor, TensorBuilder};
 
@@ -26,10 +27,10 @@ impl Default for SmallLanguageModelConfiguration {
     fn default() -> Self {
         Self {
             token_vocabulary: TokenVocabulary::default(),
-            context_window_size: 125,
+            context_window_size: 140, // like vintage Twitter
             embedding_dimensionality: 64,
             head_count: 4,
-            layer_count: 4,
+            layer_count: 6,
         }
     }
 }
@@ -146,7 +147,8 @@ pub fn sample_text(network: &SmallLanguageModel, prompt: Vec<f32>) -> String {
 }
 
 pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> SmallLanguageModel {
-    let mut optimizer = StochasticGradientDescentOptimizer::new(network.parameters(), 0.0004);
+    let mut optimizer =
+        AdaptiveMomentEstimationOptimizer::new(network.parameters(), 0.0004, 0.9, 0.999, 1e-8);
 
     let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
     let training_tokenstream = network
@@ -206,7 +208,8 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
 
         if last_status_update.elapsed() > time::Duration::from_secs(10) {
             println!(
-                "after {}s, {} steps, loss: {}",
+                "{}: after {}s, {} steps, loss: {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M"),
                 start_time.elapsed().as_secs(),
                 optimizer.step_count(),
                 loss_value

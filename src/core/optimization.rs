@@ -22,7 +22,6 @@ pub struct AdaptiveMomentEstimationOptimizer {
 }
 
 impl AdaptiveMomentEstimationOptimizer {
-    #[allow(dead_code)]
     pub fn new(
         parameters: Vec<Rc<Tensor>>,
         learning_rate: f32,

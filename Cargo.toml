@@ -1,12 +1,13 @@
 [package]
 name = "radiance"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 approx = "0.5"
+chrono = "*"
 lazy_static = "*"
 ndarray = {version = "0.16", features = ["approx"]} 
 ndarray-rand = "0.15"

@@ -6,11 +6,8 @@ Radiance is an educational neural networks library and autodifferentiation frame
 
 ### big
 
- * assess Adam vs. SGD situation; test Adam implementation against PyTorch
- * attention QKV biases
- * assess training speed impact of new elements (LayerNorm, bias, Adam)
- * choose bigger training hyperparams?
  * big training run!!
+ * attention QKV biases
 
 #### small
 
