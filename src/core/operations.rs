@@ -373,7 +373,7 @@ pub struct NormalizeRows {
 }
 
 impl NormalizeRows {
-    fn new(ε: f32) -> Self {
+    pub fn new(ε: f32) -> Self {
         Self { ε }
     }
 }
@@ -1194,6 +1194,16 @@ mod tests {
         );
         assert_eq!(colcat_back_0, array![[1., 2.], [5., 6.]].into_dyn());
         assert_eq!(colcat_back_1, array![[3., 4.], [7., 8.]].into_dyn());
+
+        // Remember that [n] and [1, n] are different shapes! Concatting "rows"
+        // (dim 0) on two array of shape [n] has shape [2n], not [2, n].
+        let line_1 = Rc::new(TensorBuilder::new(array![1., 2., 3.].into_dyn()).build());
+        let line_2 = Rc::new(TensorBuilder::new(array![4., 5., 6.].into_dyn()).build());
+        let catline = Concatenate::new(0).forward(vec![line_1, line_2]);
+        assert_eq!(
+            *catline.borrow_array(),
+            array![1., 2., 3., 4., 5., 6.].into_dyn()
+        );
     }
 
     #[test]

@@ -6,8 +6,8 @@ use ndarray_rand::RandomExt;
 
 use super::dense::MultiLayerPerceptron;
 use super::operations::{
-    Addition, Concatenate, Mask, MatrixMultiplication, Multiplication, Operation,
-    SoftmaxRows, Transpose
+    Addition, Concatenate, Mask, MatrixMultiplication, Multiplication, NormalizeRows, Operation,
+    Reshape, SoftmaxRows, Transpose,
 };
 use super::{Parameterized, Tensor, TensorBuilder};
 
@@ -205,10 +205,70 @@ impl Parameterized for AttentionMultiHead {
     }
 }
 
+pub struct LayerNorm {
+    identifier: String,
+    scale_weights: Rc<Tensor>,
+    shift_weights: Rc<Tensor>,
+    ε: f32,
+}
+
+impl LayerNorm {
+    pub fn new(identifier: &str, dimensionality: usize, ε: f32) -> Self {
+        let shape = (dimensionality,);
+        Self {
+            identifier: identifier.to_owned(),
+            scale_weights: Rc::new(
+                TensorBuilder::new(Array::ones(shape).into_dyn())
+                    .requires_gradient(true)
+                    .identifier(&format!("{}_scale_weights", identifier))
+                    .build(),
+            ),
+            shift_weights: Rc::new(
+                TensorBuilder::new(Array::zeros(shape).into_dyn())
+                    .requires_gradient(true)
+                    .identifier(&format!("{}_shift_weights", identifier))
+                    .build(),
+            ),
+            ε,
+        }
+    }
+
+    pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
+        let sequence_length = x.borrow_array().shape()[0];
+        let normalized = NormalizeRows::new(self.ε).forward(vec![x]);
+        // reshape from [embedding_dim'ty] to [1, embedding_dim'ty] so that we
+        // can broadcast rows to match the [sequence_length, embedding_dim'ty]
+        // input
+        let scale_weight_matrix =
+            Reshape::new(vec![1, self.scale_weights.borrow_array().shape()[0]])
+                .forward(vec![self.scale_weights.clone()]);
+        let scales = Concatenate::new(0).forward(vec![scale_weight_matrix; sequence_length]);
+        let scaled = Multiplication {}.forward(vec![normalized, scales]);
+        let shift_weight_matrix =
+            Reshape::new(vec![1, self.shift_weights.borrow_array().shape()[0]])
+                .forward(vec![self.shift_weights.clone()]);
+        let shifts = Concatenate::new(0).forward(vec![shift_weight_matrix; sequence_length]);
+        let and_shifted = Addition {}.forward(vec![scaled, shifts]);
+        and_shifted
+    }
+}
+
+impl Parameterized for LayerNorm {
+    fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
+    fn parameters(&self) -> Vec<Rc<Tensor>> {
+        vec![self.scale_weights.clone(), self.shift_weights.clone()]
+    }
+}
+
 pub struct AttentionLayer {
     identifier: String,
     attention_multihead: AttentionMultiHead,
+    layernorm_1: LayerNorm,
     multi_layer_perceptron: MultiLayerPerceptron,
+    layernorm_2: LayerNorm,
 }
 
 impl AttentionLayer {
@@ -232,25 +292,37 @@ impl AttentionLayer {
                 embedding_dimensionality,
             ],
         );
+        let layernorm_1 = LayerNorm::new(
+            &format!("{}_layernorm_1", identifier),
+            embedding_dimensionality,
+            1e-5,
+        );
+        let layernorm_2 = LayerNorm::new(
+            &format!("{}_layernorm_1", identifier),
+            embedding_dimensionality,
+            1e-5,
+        );
         Self {
             identifier: identifier.to_owned(),
             attention_multihead,
             multi_layer_perceptron,
+            layernorm_1,
+            layernorm_2,
         }
     }
 
     pub fn forward(&self, x: Rc<Tensor>) -> Rc<Tensor> {
-        // TODO: there are supposed to be LayerNorms here
         let y = self.attention_multihead.forward(x.clone());
-        // residual connection—nice
-        let z = Addition {}.forward(vec![y, x]);
+        let y_plus_residual = Addition {}.forward(vec![y, x]);
+        let z = self.layernorm_1.forward(y_plus_residual);
         // the clash of row vs. column vector conventions (Ax⃗ + b⃗, vs. x⃗A^T +
         // b⃗) between attention and my little perceptron means we have to do a
         // transpose on either side of the MLP
         let z_t = Transpose {}.forward(vec![z.clone()]);
-        let percepted = self.multi_layer_perceptron.forward(z_t.clone());
-        let percepted_t = Transpose {}.forward(vec![percepted]);
-        let attended = Addition {}.forward(vec![percepted_t, z]);
+        let mlp_z_t = self.multi_layer_perceptron.forward(z_t.clone());
+        let percepted = Transpose {}.forward(vec![mlp_z_t]);
+        let percepted_plus_residual = Addition {}.forward(vec![percepted, z]);
+        let attended = self.layernorm_2.forward(percepted_plus_residual);
         attended
     }
 }
