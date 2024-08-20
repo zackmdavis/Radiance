@@ -209,7 +209,7 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
         if last_status_update.elapsed() > time::Duration::from_secs(10) {
             println!(
                 "{}: after {}s, {} steps, loss: {}",
-                chrono::Local::now().format("%Y-%m-%d %H:%M"),
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                 start_time.elapsed().as_secs(),
                 optimizer.step_count(),
                 loss_value
