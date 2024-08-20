@@ -7,9 +7,9 @@ use ndarray_npy::{NpzReader, NpzWriter};
 
 use super::Parameterized;
 
-pub fn serialize(parameterized: &dyn Parameterized) -> Result<(), Box<dyn Error>> {
+pub fn serialize(parameterized: &dyn Parameterized, specifier: &str) -> Result<(), Box<dyn Error>> {
     let mut npz_writer =
-        NpzWriter::new(File::create(format!("{}.npz", parameterized.identifier()))?);
+        NpzWriter::new(File::create(format!("{}-{}.npz", parameterized.identifier(), specifier))?);
     for parameter in parameterized.parameters() {
         println!("serializing weights for {:?}", parameter.identifier());
         npz_writer

@@ -206,7 +206,7 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
         optimizer.step();
         optimizer.unset_gradients();
 
-        if last_status_update.elapsed() > time::Duration::from_secs(10) {
+        if last_status_update.elapsed() > time::Duration::from_secs(60 * 10) {
             println!(
                 "{}: after {}s, {} steps, loss: {}",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
@@ -218,8 +218,8 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
             last_status_update = time::Instant::now();
         }
 
-        if last_checkpoint.elapsed() > time::Duration::from_secs(60 * 10) {
-            serialize(&network).expect("network should write");
+        if last_checkpoint.elapsed() > time::Duration::from_secs(60 * 30) {
+            serialize(&network, &format!("{}", optimizer.step_count())).expect("network should write");
             last_checkpoint = time::Instant::now();
         }
 
