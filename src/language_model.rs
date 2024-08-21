@@ -200,6 +200,7 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
             )
             .build(),
         );
+
         let loss = SoftmaxCrossEntropy {}.forward(vec![logits, targets]);
         let loss_value = loss.item();
         backprop(loss);
@@ -219,7 +220,8 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
         }
 
         if last_checkpoint.elapsed() > time::Duration::from_secs(60 * 30) {
-            serialize(&network, &format!("{}", optimizer.step_count())).expect("network should write");
+            serialize(&network, &format!("{}", optimizer.step_count()))
+                .expect("network should write");
             last_checkpoint = time::Instant::now();
         }
 

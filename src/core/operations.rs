@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use log::warn;
+
 use ndarray;
 use ndarray::prelude::*;
 
@@ -404,7 +406,6 @@ impl Operation for NormalizeRows {
         };
         Rc::new(
             TensorBuilder::new(normalized.into_dyn())
-                .requires_gradient(true)
                 .origin(origin)
                 .build(),
         )
@@ -703,6 +704,15 @@ impl Operation for SoftmaxCrossEntropy {
                 .zip(prediction)
                 .map(|(t, p)| -t * p.ln())
                 .sum::<f32>();
+        }
+        // TODO: implement log–sum–exp trick (working in logspace the entire
+        // time, as contrasted to merely subtracting the largest logit while
+        // softmaxing to get a non-log probability)?
+        if loss.is_nan() || loss.is_infinite() {
+            warn!(
+                "loss was {}; logits were {:?}, targets were {:?}",
+                loss, logits, targets
+            );
         }
 
         let origin = Origin {

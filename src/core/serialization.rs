@@ -3,15 +3,17 @@
 use std::error::Error;
 use std::fs::File;
 
+use log::info;
+
 use ndarray_npy::{NpzReader, NpzWriter};
 
 use super::Parameterized;
 
 pub fn serialize(parameterized: &dyn Parameterized, specifier: &str) -> Result<(), Box<dyn Error>> {
-    let mut npz_writer =
-        NpzWriter::new(File::create(format!("{}-{}.npz", parameterized.identifier(), specifier))?);
+    let filename = format!("{}-{}.npz", parameterized.identifier(), specifier);
+    info!("serializing to {} ...", filename);
+    let mut npz_writer = NpzWriter::new(File::create(filename)?);
     for parameter in parameterized.parameters() {
-        println!("serializing weights for {:?}", parameter.identifier());
         npz_writer
             .add_array(parameter.identifier(), &*parameter.borrow_array())
             .expect("array should write");

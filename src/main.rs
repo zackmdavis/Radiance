@@ -12,6 +12,9 @@ mod language_model;
 
 fn main() {
     println!("Hello Radiance world!");
+
+    env_logger::init();
+
     let args = env::args().collect::<Vec<_>>();
 
     let network = language_model::SmallLanguageModel::new(

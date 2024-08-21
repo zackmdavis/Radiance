@@ -5,6 +5,8 @@ use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::sync::Mutex;
 
+use log::{error, trace};
+
 use lazy_static::lazy_static;
 use ndarray::prelude::*;
 
@@ -200,6 +202,7 @@ pub fn backprop(culmination: Rc<Tensor>) {
 
         // If it requires gradient, set it from the map
         if node.requires_gradient {
+            trace!("setting gradient for {:?}", node.identifier);
             *node.gradient.borrow_mut() = Some(gradient.clone());
         }
 
@@ -213,11 +216,11 @@ pub fn backprop(culmination: Rc<Tensor>) {
                         .operation
                         .backward(&out_gradient, origin.parents.clone(), i);
                 if contribution.is_any_nan() {
-                    println!(
+                    error!(
                         "contribution for {:?} contains NaN, operation of origin: {:?}",
                         &parent.identifier, origin.operation
                     );
-                    assert!(false);
+                    assert!(false, "bad gradient");
                 }
                 match gradients.get_mut(&parent.identifier) {
                     Some(gradient) => {
