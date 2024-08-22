@@ -1,5 +1,8 @@
 use std::rc::Rc;
 
+#[allow(unused_imports)]
+use log::debug;
+
 use ndarray::prelude::*;
 
 use super::Tensor;
@@ -75,9 +78,12 @@ impl Optimizer for AdaptiveMomentEstimationOptimizer {
                         .second_moment_estimate_decay
                         .powi((self.step_count + 1) as i32));
 
-            *array = &*array
-                - self.learning_rate * &corrected_first_moments
-                    / (corrected_second_moments.sqrt() + self.ε);
+            let update = self.learning_rate * &corrected_first_moments
+                / (corrected_second_moments.sqrt() + self.ε);
+
+            // TODO: decide what to log here to figure out why training is so ineffective
+
+            *array = &*array - update;
         }
 
         self.step_count += 1;
