@@ -160,7 +160,10 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
     let mut last_status_update = time::Instant::now();
     let mut last_checkpoint = time::Instant::now();
 
-    for context_window in training_tokenstream.windows(network.configuration.context_window_size) {
+    for context_window in training_tokenstream
+        .windows(network.configuration.context_window_size)
+        .step_by(network.configuration.context_window_size)
+    {
         // We shift the input sequence by one (padding the beginning with a
         // start-of-sequence token, so that each position can predict its own
         // next token.
