@@ -15,10 +15,8 @@ pub trait Operation: std::fmt::Debug {
     fn backward(
         &self,
         _out_gradient: &ArrayD<f32>,
-        // TODO CONSISTENCY: why did I say `inputs` going forwards, but `args`
-        // going backwards?
-        _args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        _inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32>;
 }
 
@@ -45,8 +43,8 @@ impl Operation for Addition {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        _args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        _inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
         // Addition just passes the gradient through to both branches.
         out_gradient.clone()
@@ -69,16 +67,16 @@ impl Operation for Multiplication {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        input_index: usize,
     ) -> ArrayD<f32> {
-        let other_arg_index = match arg_index {
+        let other_input_index = match input_index {
             0 => 1,
             1 => 0,
             _ => panic!("binary operation expected"),
         };
         // d/dx(xy) = y
-        out_gradient * args[other_arg_index].array.borrow().clone() // dubious perf &c.
+        out_gradient * inputs[other_input_index].array.borrow().clone() // dubious perf &c.
     }
 }
 
@@ -99,10 +97,10 @@ impl Operation for Exponentiation {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
-        out_gradient * args[0].borrow_array().exp()
+        out_gradient * inputs[0].borrow_array().exp()
     }
 }
 
@@ -135,8 +133,8 @@ impl Operation for MatrixMultiplication {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        input_index: usize,
     ) -> ArrayD<f32> {
         let out_gradient = out_gradient
             .clone()
@@ -144,9 +142,9 @@ impl Operation for MatrixMultiplication {
             .expect("out gradient is two-dimensional");
         // matrix multiplication is not commutative; separate cases for
         // out_gradient @ B^T and A^T @ out_gradient
-        match arg_index {
+        match input_index {
             0 => {
-                let other = args[1]
+                let other = inputs[1]
                     .array
                     .borrow()
                     .clone()
@@ -156,7 +154,7 @@ impl Operation for MatrixMultiplication {
                 out_gradient.dot(&other_transpose).into_dyn()
             }
             1 => {
-                let other = args[0]
+                let other = inputs[0]
                     .array
                     .borrow()
                     .clone()
@@ -190,11 +188,11 @@ impl Operation for RectifiedLinearUnit {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
-        let mut gradient = Array::zeros(args[0].array.borrow().shape()).into_dyn();
-        azip!((g in &mut gradient, o in out_gradient, a in &*args[0].array.borrow()) if a > &0. { *g += o });
+        let mut gradient = Array::zeros(inputs[0].array.borrow().shape()).into_dyn();
+        azip!((g in &mut gradient, o in out_gradient, a in &*inputs[0].array.borrow()) if a > &0. { *g += o });
         gradient
     }
 }
@@ -227,12 +225,12 @@ impl Operation for LeakyRectifiedLinearUnit {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
-        let mut gradient = Array::zeros(args[0].array.borrow().shape()).into_dyn();
+        let mut gradient = Array::zeros(inputs[0].array.borrow().shape()).into_dyn();
         azip!(
-            (g in &mut gradient, o in out_gradient, a in &*args[0].array.borrow())
+            (g in &mut gradient, o in out_gradient, a in &*inputs[0].array.borrow())
               if a > &0. {
                   *g += o
               } else {
@@ -275,13 +273,13 @@ impl Operation for Reshape {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        input_index: usize,
     ) -> ArrayD<f32> {
-        assert!(arg_index == 0);
+        assert!(input_index == 0);
         out_gradient
             .clone()
-            .into_shape_with_order(args[0].array.borrow().shape())
+            .into_shape_with_order(inputs[0].array.borrow().shape())
             .expect("input shape should match")
     }
 }
@@ -307,8 +305,8 @@ impl Operation for Transpose {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        _args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        _inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
         out_gradient.t().to_owned()
     }
@@ -344,24 +342,24 @@ impl Operation for Concatenate {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        input_index: usize,
     ) -> ArrayD<f32> {
-        let thicknesses = args
+        let thicknesses = inputs
             .iter()
             .map(|t| t.array.borrow().shape()[self.axis])
             .collect::<Vec<_>>();
-        let rods_before: usize = thicknesses[..arg_index].iter().sum();
+        let rods_before: usize = thicknesses[..input_index].iter().sum();
         match self.axis {
             // TODO: there's probably a more general way to say this, but it's
             // not our concern now; Claude Sonnet 3.5 suggests using either
             // SliceInfo or slice_axis
             0 => out_gradient
-                .slice(s![rods_before..rods_before + thicknesses[arg_index], ..])
+                .slice(s![rods_before..rods_before + thicknesses[input_index], ..])
                 .to_owned()
                 .into_dyn(),
             1 => out_gradient
-                .slice(s![.., rods_before..rods_before + thicknesses[arg_index]])
+                .slice(s![.., rods_before..rods_before + thicknesses[input_index]])
                 .to_owned()
                 .into_dyn(),
             _ => panic!("only axes 0 and 1 supported for now"),
@@ -414,10 +412,10 @@ impl Operation for NormalizeRows {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
-        let array = args[0]
+        let array = inputs[0]
             .borrow_array()
             .clone()
             .into_dimensionality::<Ix2>()
@@ -494,15 +492,15 @@ impl Operation for SquaredError {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        input_index: usize,
     ) -> ArrayD<f32> {
         // d/dx (y − x)² = 2(y − x) · d/dx(y − x) = 2(y − x) · −1 = −2(y − x)
         // d/dy (y − x)² = 2(y − x) · d/dy(y − x) = 2(y − x) · 1 = 2(y − x)
-        let prediction = args[0].array.borrow()[0];
-        let target = args[1].array.borrow()[0];
+        let prediction = inputs[0].array.borrow()[0];
+        let target = inputs[1].array.borrow()[0];
         let ddp = 2. * (target - prediction);
-        let local_gradient = match arg_index {
+        let local_gradient = match input_index {
             0 => -ddp,
             1 => ddp,
             _ => panic!("binary operation expected"),
@@ -560,11 +558,11 @@ impl Operation for Softmax {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
         let softmaxed = softmax(
-            args[0]
+            inputs[0]
                 .array
                 .borrow()
                 .clone()
@@ -622,10 +620,10 @@ impl Operation for SoftmaxRows {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
-        let x = args[0]
+        let x = inputs[0]
             .array
             .borrow()
             .clone()
@@ -729,19 +727,19 @@ impl Operation for SoftmaxCrossEntropy {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
-        assert!(args.len() == 2, "binary operation expected");
-        // But we're ignoring `_arg_index` because we only care about the
+        assert!(inputs.len() == 2, "binary operation expected");
+        // But we're ignoring `_input_index` because we only care about the
         // gradient of the predictions.
-        let logits = args[0]
+        let logits = inputs[0]
             .array
             .borrow()
             .clone()
             .into_dimensionality::<Ix2>()
             .expect("two-dimensional");
-        let targets = args[1]
+        let targets = inputs[1]
             .array
             .borrow()
             .clone()
@@ -810,22 +808,22 @@ impl Operation for Mask {
     fn backward(
         &self,
         out_gradient: &ArrayD<f32>,
-        args: Vec<Rc<Tensor>>,
-        _arg_index: usize,
+        inputs: Vec<Rc<Tensor>>,
+        _input_index: usize,
     ) -> ArrayD<f32> {
-        // We can ignore `_arg_index` because we only care about the gradient
+        // We can ignore `_input_index` because we only care about the gradient
         // of the input being masked, not the mask itself?
         //
         // ... that actually seems kind of sketchy (backprop is still going to
-        // call it with _arg_index=1, the answer will be presumably wrong, and
+        // call it with _input_index=1, the answer will be presumably wrong, and
         // we're just betting that nothing important depends on that tensor
-        let array = args[0]
+        let array = inputs[0]
             .array
             .borrow()
             .clone()
             .into_dimensionality::<Ix2>()
             .expect("two-dimensional");
-        let mask = args[1]
+        let mask = inputs[1]
             .array
             .borrow()
             .clone()
@@ -870,14 +868,14 @@ mod tests {
     fn test_addition_backward() {
         let a = TensorBuilder::new(array![1.].into_dyn()).build();
         let b = TensorBuilder::new(array![2.].into_dyn()).build();
-        let args = vec![Rc::new(a), Rc::new(b)];
+        let inputs = vec![Rc::new(a), Rc::new(b)];
         let out_gradient = array![1.].into_dyn();
         assert_eq!(
-            Addition {}.backward(&out_gradient, args.clone(), 0),
+            Addition {}.backward(&out_gradient, inputs.clone(), 0),
             out_gradient
         );
         assert_eq!(
-            Addition {}.backward(&out_gradient, args.clone(), 1),
+            Addition {}.backward(&out_gradient, inputs.clone(), 1),
             out_gradient
         );
     }
@@ -886,14 +884,14 @@ mod tests {
     fn test_multiplication_backward() {
         let a = TensorBuilder::new(array![2.].into_dyn()).build();
         let b = TensorBuilder::new(array![3.].into_dyn()).build();
-        let args = vec![Rc::new(a), Rc::new(b)];
+        let inputs = vec![Rc::new(a), Rc::new(b)];
         let out_gradient = array![1.].into_dyn();
         assert_eq!(
-            Multiplication {}.backward(&out_gradient, args.clone(), 0),
+            Multiplication {}.backward(&out_gradient, inputs.clone(), 0),
             array![3.].into_dyn()
         );
         assert_eq!(
-            Multiplication {}.backward(&out_gradient, args.clone(), 1),
+            Multiplication {}.backward(&out_gradient, inputs.clone(), 1),
             array![2.].into_dyn()
         );
     }
