@@ -298,7 +298,7 @@ impl AttentionLayer {
             1e-5,
         );
         let layernorm_2 = LayerNorm::new(
-            &format!("{}_layernorm_1", identifier),
+            &format!("{}_layernorm_2", identifier),
             embedding_dimensionality,
             1e-5,
         );
@@ -336,6 +336,8 @@ impl Parameterized for AttentionLayer {
         let mut parameters = Vec::new();
         parameters.extend(self.attention_multihead.parameters());
         parameters.extend(self.multi_layer_perceptron.parameters());
+        parameters.extend(self.layernorm_1.parameters());
+        parameters.extend(self.layernorm_2.parameters());
         parameters
     }
 }
