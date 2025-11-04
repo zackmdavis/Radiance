@@ -38,6 +38,9 @@ impl TokenVocabulary {
                     revised_training_tokens.push(first.to_owned());
                 }
             }
+            if !skip_next {
+                revised_training_tokens.push(training_tokens.last().unwrap().to_owned());
+            }
             training_tokens = revised_training_tokens
         }
 
@@ -72,7 +75,7 @@ Ernestine Stanley—that was the name she read in one of her books open beside h
         let vocabulary = TokenVocabulary::new_from_corpus(mock_megastring.to_owned(), 125);
         assert_eq!(
             vocabulary.merge_rules,
-            vec! [("e", " "), (" ", "t"), ("t", " "), ("h", "e "), ("i", "n"), ("e", "r"), ("d", " "), ("h", "a"), ("e", "n"), (" ", "a"), (" t", "o"), (" ", "m"), ("o", "f"), ("h", "er"), ("in", "g"), (" t", "he "), ("o", "n"), (" ", "s"), ("a", "r"), ("y", " "), ("a", "n"), ("a", "s"), ("o", "u"), (" ", "of"), ("t", "h"), ("o", "w"), ("i", "s"), ("e", "d ")].into_iter().map(|pair| (pair.0.to_owned(), pair.1.to_owned())).collect::<Vec<_>>()
+            vec! [("e", " "), (" ", "t"), ("t", " "), ("h", "e "), ("i", "n"), ("e", "r"), ("d", " "), ("h", "a"), ("e", "n"), (" ", "a"), (" t", "o"), (" ", "m"), ("o", "f"), ("h", "er"), (" t", "he "), ("in", "g"), ("o", "n"), ("a", "r"), (" ", "s"), ("y", " "), ("a", "n"), ("a", "s"), ("o", "u"), (" ", "of"), ("t", "h"), ("o", "w"), ("i", "s"), ("e", "d ")].into_iter().map(|pair| (pair.0.to_owned(), pair.1.to_owned())).collect::<Vec<_>>()
        )
     }
 }
