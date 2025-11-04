@@ -58,7 +58,11 @@ impl Optimizer for AdaptiveMomentEstimationOptimizer {
             let mut array = parameter.array.borrow_mut();
             let and_some_gradient = parameter.gradient.borrow();
             let some_and_gradient = and_some_gradient.as_ref();
-            let gradient = some_and_gradient.expect(&format!("gradient should exist for parameter {} ({})", i, parameter.identifier()));
+            let gradient = some_and_gradient.expect(&format!(
+                "gradient should exist for parameter {} ({})",
+                i,
+                parameter.identifier()
+            ));
 
             self.first_moment_estimates[i] = self.first_moment_estimate_decay
                 * &self.first_moment_estimates[i]

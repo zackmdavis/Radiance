@@ -1,25 +1,33 @@
 #![allow(dead_code)]
 
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 
-use super::embedding::{TokenVocabulary};
+use super::embedding::TokenVocabulary;
 
 impl TokenVocabulary {
     pub fn new_from_corpus(training_megastring: String, vocabulary_size: u16) -> Self {
-        let mut training_tokens: Vec<String> = training_megastring.chars().map(|c| c.to_string()).collect();
+        let mut training_tokens: Vec<String> =
+            training_megastring.chars().map(|c| c.to_string()).collect();
         let mut merge_rules: Vec<(String, String)> = Vec::new();
         // u16 range is from 0–65,535; our base alphabet is 97 chars, so we
         // have at most 65536−97 = 65439 other tokens to learn.
         //
         // We don't actually want to learn that many, because a larger
         // vocabulary means spending more parameters on the embedding matrix.
-        for _iteration in 0..vocabulary_size-97 {
+        for _iteration in 0..vocabulary_size - 97 {
             let mut bigram_counter = BTreeMap::<(String, String), usize>::new();
             for bigram in training_tokens.windows(2) {
-                let [first, second] = bigram else { unreachable!(); };
-                *bigram_counter.entry((first.to_owned(), second.to_owned())).or_insert(0) += 1;
+                let [first, second] = bigram else {
+                    unreachable!();
+                };
+                *bigram_counter
+                    .entry((first.to_owned(), second.to_owned()))
+                    .or_insert(0) += 1;
             }
-            let (merge, _count) = bigram_counter.iter().max_by_key(|(_bigram, &count)| count).unwrap();
+            let (merge, _count) = bigram_counter
+                .iter()
+                .max_by_key(|(_bigram, &count)| count)
+                .unwrap();
             let mergetoken = merge.0.clone() + &merge.1;
             merge_rules.push(merge.clone());
 
@@ -30,7 +38,9 @@ impl TokenVocabulary {
                     skip_next = false;
                     continue;
                 }
-                let [first, second] = bigram else { unreachable!(); };
+                let [first, second] = bigram else {
+                    unreachable!();
+                };
                 if *first == merge.0 && *second == merge.1 {
                     revised_training_tokens.push(mergetoken.clone());
                     skip_next = true;
@@ -54,7 +64,6 @@ impl TokenVocabulary {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,7 +84,39 @@ Ernestine Stanley—that was the name she read in one of her books open beside h
         let vocabulary = TokenVocabulary::new_from_corpus(mock_megastring.to_owned(), 125);
         assert_eq!(
             vocabulary.merge_rules,
-            vec! [("e", " "), (" ", "t"), ("t", " "), ("h", "e "), ("i", "n"), ("e", "r"), ("d", " "), ("h", "a"), ("e", "n"), (" ", "a"), (" t", "o"), (" ", "m"), ("o", "f"), ("h", "er"), (" t", "he "), ("in", "g"), ("o", "n"), ("a", "r"), (" ", "s"), ("y", " "), ("a", "n"), ("a", "s"), ("o", "u"), (" ", "of"), ("t", "h"), ("o", "w"), ("i", "s"), ("e", "d ")].into_iter().map(|pair| (pair.0.to_owned(), pair.1.to_owned())).collect::<Vec<_>>()
-       )
+            vec![
+                ("e", " "),
+                (" ", "t"),
+                ("t", " "),
+                ("h", "e "),
+                ("i", "n"),
+                ("e", "r"),
+                ("d", " "),
+                ("h", "a"),
+                ("e", "n"),
+                (" ", "a"),
+                (" t", "o"),
+                (" ", "m"),
+                ("o", "f"),
+                ("h", "er"),
+                (" t", "he "),
+                ("in", "g"),
+                ("o", "n"),
+                ("a", "r"),
+                (" ", "s"),
+                ("y", " "),
+                ("a", "n"),
+                ("a", "s"),
+                ("o", "u"),
+                (" ", "of"),
+                ("t", "h"),
+                ("o", "w"),
+                ("i", "s"),
+                ("e", "d ")
+            ]
+            .into_iter()
+            .map(|pair| (pair.0.to_owned(), pair.1.to_owned()))
+            .collect::<Vec<_>>()
+        )
     }
 }
