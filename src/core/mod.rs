@@ -70,11 +70,11 @@ impl Tensor {
         &self.identifier
     }
 
-    pub fn borrow_array(&self) -> Ref<ArrayD<f32>> {
+    pub fn borrow_array(&self) -> Ref<'_, ArrayD<f32>> {
         self.array.borrow()
     }
 
-    pub fn borrow_array_mut(&self) -> RefMut<ArrayD<f32>> {
+    pub fn borrow_array_mut(&self) -> RefMut<'_, ArrayD<f32>> {
         self.array.borrow_mut()
     }
 

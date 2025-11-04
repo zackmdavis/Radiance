@@ -80,6 +80,7 @@ impl Operation for Multiplication {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Exponentiation {}
 
@@ -168,6 +169,7 @@ impl Operation for MatrixMultiplication {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct RectifiedLinearUnit {}
 
@@ -530,6 +532,7 @@ fn δ(i: usize, j: usize) -> f32 {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Softmax {}
 
