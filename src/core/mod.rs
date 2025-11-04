@@ -19,6 +19,7 @@ pub mod embedding;
 pub mod operations;
 pub mod optimization;
 pub mod serialization;
+pub mod tokenization;
 
 use self::operations::Operation;
 

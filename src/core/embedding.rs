@@ -8,10 +8,15 @@ use ndarray_rand::RandomExt;
 use super::operations::{MatrixMultiplication, Operation, Transpose};
 use super::{Origin, Parameterized, Tensor, TensorBuilder};
 
+#[derive(Debug)]
 pub struct TokenVocabulary {
     // TODO: getter methods (that don't return Option) instead of pub HashMap
     pub token_to_id: HashMap<char, u16>,
     pub id_to_token: HashMap<u16, char>,
+
+    // TODO: close down public field?—being set in tokenization.rs
+    #[allow(dead_code)]
+    pub merge_rules: Vec<(String, String)>
 }
 
 impl TokenVocabulary {
@@ -25,6 +30,7 @@ impl TokenVocabulary {
         TokenVocabulary {
             token_to_id,
             id_to_token,
+            merge_rules: Vec::new(),
         }
     }
 
@@ -44,18 +50,20 @@ impl TokenVocabulary {
     }
 }
 
+pub const STANDARD_VOCABULARY: [char; 97] = [
+    '▶', // start of sequence
+    '\n', ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?', '@',
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
+    'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_', '`', 'a', 'b',
+    'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
+    't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '—',
+];
+
+
 impl Default for TokenVocabulary {
     fn default() -> Self {
-        let standard_vocabulary = vec![
-            '▶', // start of sequence
-            '\n', ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
-            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?', '@',
-            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
-            'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_', '`', 'a', 'b',
-            'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
-            't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|', '}', '—',
-        ];
-        Self::new(standard_vocabulary)
+        Self::new(STANDARD_VOCABULARY.to_vec())
     }
 }
 
