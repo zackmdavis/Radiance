@@ -114,7 +114,7 @@ pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>)
     let next_token_id = next_token_distribution.sample(&mut rng);
     let next_token = token_vocabulary
         .id_to_token
-        .get(&(next_token_id as u8))
+        .get(&(next_token_id as u16))
         .unwrap();
     *next_token
 }

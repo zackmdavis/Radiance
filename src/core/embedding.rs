@@ -10,8 +10,8 @@ use super::{Origin, Parameterized, Tensor, TensorBuilder};
 
 pub struct TokenVocabulary {
     // TODO: getter methods (that don't return Option) instead of pub HashMap
-    pub token_to_id: HashMap<char, u8>,
-    pub id_to_token: HashMap<u8, char>,
+    pub token_to_id: HashMap<char, u16>,
+    pub id_to_token: HashMap<u16, char>,
 }
 
 impl TokenVocabulary {
@@ -19,8 +19,8 @@ impl TokenVocabulary {
         let mut token_to_id = HashMap::new();
         let mut id_to_token = HashMap::new();
         for (i, token) in tokens.iter().enumerate() {
-            id_to_token.insert(i as u8, *token);
-            token_to_id.insert(*token, i as u8);
+            id_to_token.insert(i as u16, *token);
+            token_to_id.insert(*token, i as u16);
         }
         TokenVocabulary {
             token_to_id,
@@ -36,7 +36,7 @@ impl TokenVocabulary {
         let mut token_ids = Vec::new();
         for c in text.chars() {
             match self.token_to_id.get(&c) {
-                Some(id) => token_ids.push(*id as u8 as f32),
+                Some(id) => token_ids.push(*id as f32),
                 None => {}
             }
         }
