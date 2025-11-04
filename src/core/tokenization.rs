@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 use super::embedding::{TokenVocabulary};
 
@@ -14,7 +14,7 @@ impl TokenVocabulary {
         // We don't actually want to learn that many, because a larger
         // vocabulary means spending more parameters on the embedding matrix.
         for _iteration in 0..vocabulary_size-97 {
-            let mut bigram_counter = HashMap::<(String, String), usize>::new();
+            let mut bigram_counter = BTreeMap::<(String, String), usize>::new();
             for bigram in training_tokens.windows(2) {
                 let [first, second] = bigram else { unreachable!(); };
                 *bigram_counter.entry((first.to_owned(), second.to_owned())).or_insert(0) += 1;
@@ -24,10 +24,16 @@ impl TokenVocabulary {
             merge_rules.push(merge.clone());
 
             let mut revised_training_tokens = Vec::new();
+            let mut skip_next = false;
             for bigram in training_tokens.windows(2) {
+                if skip_next {
+                    skip_next = false;
+                    continue;
+                }
                 let [first, second] = bigram else { unreachable!(); };
                 if *first == merge.0 && *second == merge.1 {
                     revised_training_tokens.push(mergetoken.clone());
+                    skip_next = true;
                 } else {
                     revised_training_tokens.push(first.to_owned());
                 }
@@ -50,7 +56,6 @@ impl TokenVocabulary {
 mod tests {
     use super::*;
 
-    #[ignore]
     #[test]
     fn test_tokenization_learning() {
         let mock_megastring = "She had promised to marry a scientist! It was too overwhelming a thought to entertain standing there by the window. She sought the room's most comfortable chair and braced herself to the situation.
@@ -64,8 +69,10 @@ But ah—here was the vindication! He had not _asked_ her to marry him. He had s
 But she thought of them a little now. How could she get away from them when each year of her past marched slowly in front of her, paused for an instant that she might get a full view, and then passed grinningly back to the abyss of things gone, from over the shoulder tossing straight into her consciousness a jeering, deep sinking \"_You too?_\"
 
 Ernestine Stanley—that was the name she read in one of her books open beside her. Why her very _name_ stood for that quarrel which had rent all the years!";
-        let vocabulary = TokenVocabulary::new_from_corpus(mock_megastring.to_owned(), 120);
-        assert_eq!(vocabulary.merge_rules, vec![]); // TODO
+        let vocabulary = TokenVocabulary::new_from_corpus(mock_megastring.to_owned(), 125);
+        assert_eq!(
+            vocabulary.merge_rules,
+            vec! [("e", " "), (" ", "t"), ("t", " "), ("h", "e "), ("i", "n"), ("e", "r"), ("d", " "), ("h", "a"), ("e", "n"), (" ", "a"), (" t", "o"), (" ", "m"), ("o", "f"), ("h", "er"), ("in", "g"), (" t", "he "), ("o", "n"), (" ", "s"), ("a", "r"), ("y", " "), ("a", "n"), ("a", "s"), ("o", "u"), (" ", "of"), ("t", "h"), ("o", "w"), ("i", "s"), ("e", "d ")].into_iter().map(|pair| (pair.0.to_owned(), pair.1.to_owned())).collect::<Vec<_>>()
+       )
     }
-
 }
