@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use super::embedding::TokenVocabulary;
+use super::embedding::{TokenVocabulary, STANDARD_VOCABULARY};
 
 impl TokenVocabulary {
     pub fn new_from_corpus(training_megastring: String, vocabulary_size: u16) -> Self {
@@ -54,12 +54,29 @@ impl TokenVocabulary {
             training_tokens = revised_training_tokens
         }
 
-        TokenVocabulary {
-            merge_rules,
+        let mut token_to_id = HashMap::new();
+        let mut id_to_token = HashMap::new();
 
-            // TODO: figure out how to set these
-            token_to_id: HashMap::new(),
-            id_to_token: HashMap::new(),
+        for (id, token) in STANDARD_VOCABULARY.iter().enumerate() {
+            token_to_id.insert(token.to_string(), id as u16);
+            id_to_token.insert(id as u16, token.to_string());
+        }
+        for (rule_id, merge) in merge_rules.iter().enumerate() {
+            let token = merge.0.clone() + &merge.1;
+            token_to_id.insert(
+                token.to_owned(),
+                (rule_id + STANDARD_VOCABULARY.len()) as u16,
+            );
+            id_to_token.insert(
+                (rule_id + STANDARD_VOCABULARY.len()) as u16,
+                token.to_owned(),
+            );
+        }
+
+        TokenVocabulary {
+            token_to_id,
+            id_to_token,
+            merge_rules,
         }
     }
 }

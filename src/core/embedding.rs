@@ -10,13 +10,10 @@ use super::{Origin, Parameterized, Tensor, TensorBuilder};
 
 #[derive(Debug)]
 pub struct TokenVocabulary {
-    // TODO: getter methods (that don't return Option) instead of pub HashMap
-    pub token_to_id: HashMap<char, u16>,
-    pub id_to_token: HashMap<u16, char>,
+    pub token_to_id: HashMap<String, u16>,
+    pub id_to_token: HashMap<u16, String>,
 
-    // TODO: close down public field?—being set in tokenization.rs
-    #[allow(dead_code)]
-    pub merge_rules: Vec<(String, String)>,
+    pub(super) merge_rules: Vec<(String, String)>,
 }
 
 impl TokenVocabulary {
@@ -24,8 +21,8 @@ impl TokenVocabulary {
         let mut token_to_id = HashMap::new();
         let mut id_to_token = HashMap::new();
         for (i, token) in tokens.iter().enumerate() {
-            id_to_token.insert(i as u16, *token);
-            token_to_id.insert(*token, i as u16);
+            id_to_token.insert(i as u16, (*token).to_string());
+            token_to_id.insert((*token).to_string(), i as u16);
         }
         TokenVocabulary {
             token_to_id,
@@ -35,18 +32,39 @@ impl TokenVocabulary {
     }
 
     pub fn size(&self) -> usize {
-        self.token_to_id.len()
+        self.token_to_id.len() // without loss of generality
     }
 
     pub fn tokenize(&self, text: &str) -> Vec<f32> {
-        let mut token_ids = Vec::new();
-        for c in text.chars() {
-            match self.token_to_id.get(&c) {
-                Some(id) => token_ids.push(*id as f32),
-                None => {}
+        let mut tokens: Vec<String> = text.chars().map(|c| c.to_string()).collect();
+        for (_i, merge_rule) in self.merge_rules.iter().enumerate() {
+            let mut revised_tokens = Vec::new();
+            let mut skip_next = false;
+            for bigram in tokens.windows(2) {
+                if skip_next {
+                    skip_next = false;
+                    continue;
+                }
+                let [first, second] = bigram else {
+                    unreachable!();
+                };
+                if *first == merge_rule.0 && *second == merge_rule.1 {
+                    revised_tokens.push(first.to_owned() + second);
+                    skip_next = true;
+                } else {
+                    revised_tokens.push(first.to_owned());
+                }
             }
+            if !skip_next {
+                revised_tokens.push(tokens.last().unwrap().to_owned());
+            }
+            tokens = revised_tokens;
         }
-        token_ids
+        let mut ids = Vec::new();
+        for token in tokens {
+            ids.push(*self.token_to_id.get(&token).expect("token ID should exist") as f32);
+        }
+        ids
     }
 }
 

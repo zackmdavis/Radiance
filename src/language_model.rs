@@ -100,7 +100,7 @@ impl SmallLanguageModel {
     }
 }
 
-pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>) -> char {
+pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>) -> String {
     let n = logits.borrow_array().shape()[0];
     let logit_matrix = logits
         .borrow_array()
@@ -116,7 +116,7 @@ pub fn sample_next_token(token_vocabulary: &TokenVocabulary, logits: Rc<Tensor>)
         .id_to_token
         .get(&(next_token_id as u16))
         .unwrap();
-    *next_token
+    next_token.clone()
 }
 
 pub fn sample_text(network: &SmallLanguageModel, prompt: Vec<f32>) -> String {
@@ -133,7 +133,7 @@ pub fn sample_text(network: &SmallLanguageModel, prompt: Vec<f32>) -> String {
         );
         let logits = network.forward(input);
         let next_token = sample_next_token(&network.configuration.token_vocabulary, logits);
-        text.push(next_token);
+        text.push(next_token.clone());
         raw_context.push(
             *network
                 .configuration
@@ -143,7 +143,7 @@ pub fn sample_text(network: &SmallLanguageModel, prompt: Vec<f32>) -> String {
                 .unwrap() as f32,
         );
     }
-    text.iter().collect()
+    text.concat()
 }
 
 pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> SmallLanguageModel {
