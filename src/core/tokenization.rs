@@ -39,7 +39,7 @@ impl TokenVocabulary {
         self.token_to_id.len() // without loss of generality
     }
 
-    pub fn tokenize(&self, text: &str) -> Vec<f32> {
+    pub fn tokenize(&self, text: &str) -> Vec<String> {
         let mut tokens: Vec<String> = text.chars().map(|c| c.to_string()).collect();
         for (_i, merge_rule) in self.merge_rules.iter().enumerate() {
             let mut revised_tokens = Vec::new();
@@ -64,6 +64,11 @@ impl TokenVocabulary {
             }
             tokens = revised_tokens;
         }
+        tokens
+    }
+
+    pub fn token_id_ize(&self, text: &str) -> Vec<f32> {
+        let tokens = self.tokenize(text);
         let mut ids = Vec::new();
         for token in tokens {
             ids.push(*self.token_to_id.get(&token).expect("token ID should exist") as f32);
@@ -158,7 +163,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tokenization_learning() {
+    fn test_tokenization() {
         let mock_megastring = "She had promised to marry a scientist! It was too overwhelming a thought to entertain standing there by the window. She sought the room's most comfortable chair and braced herself to the situation.
 
 If, one month before, a gossiping daughter of Fate had come to her with—\"Shall I tell you something?—_You_ are going to marry a man of science!\"—she would have smiled serenely at Fate's amusing mistake and responded—\"My good friend, it is quite true that great uncertainty attends this subject. So much to be expected is the unexpected, that I am quite willing to admit I _may_ marry the hurdy-gurdy man who plays beneath my window. I know life well enough to appreciate that I _may_ marry a pawnbroker or the Sultan of Turkey. I assert but one thing. I shall _not_ marry a 'man of science.'\"
@@ -206,6 +211,13 @@ Ernestine Stanley—that was the name she read in one of her books open beside h
             .into_iter()
             .map(|pair| (pair.0.to_owned(), pair.1.to_owned()))
             .collect::<Vec<_>>()
-        )
+        );
+        let tokens = vocabulary.tokenize(mock_megastring);
+        assert_eq!(
+            tokens[..15],
+            vec![
+                "S", "he ", "ha", "d ", "p", "r", "o", "m", "is", "e", "d", " to", " m", "ar", "r",
+            ]
+        );
     }
 }

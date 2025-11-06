@@ -67,7 +67,7 @@ fn main() {
                     "{}",
                     language_model::sample_text(
                         &network,
-                        network.configuration().token_vocabulary.tokenize(&prompt)
+                        network.configuration().token_vocabulary.token_id_ize(&prompt)
                     )
                 );
                 prompt.clear();

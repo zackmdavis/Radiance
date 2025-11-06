@@ -155,7 +155,7 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
     let training_tokenstream = network
         .configuration
         .token_vocabulary
-        .tokenize(&training_megastring);
+        .token_id_ize(&training_megastring);
 
     let start_time = time::Instant::now();
     let mut last_status_update = time::Instant::now();
