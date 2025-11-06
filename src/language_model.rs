@@ -17,7 +17,6 @@ use crate::core::tokenization::TokenVocabulary;
 use crate::core::{backprop, Parameterized, Tensor, TensorBuilder};
 
 pub struct SmallLanguageModelConfiguration {
-    pub token_vocabulary: TokenVocabulary,
     pub context_window_size: usize,
     pub embedding_dimensionality: usize,
     pub head_count: usize,
@@ -27,7 +26,6 @@ pub struct SmallLanguageModelConfiguration {
 impl Default for SmallLanguageModelConfiguration {
     fn default() -> Self {
         Self {
-            token_vocabulary: TokenVocabulary::default(),
             context_window_size: 256,
             embedding_dimensionality: 128,
             head_count: 4,
@@ -39,6 +37,7 @@ impl Default for SmallLanguageModelConfiguration {
 pub struct SmallLanguageModel {
     identifier: String,
     configuration: SmallLanguageModelConfiguration,
+    token_vocabulary: TokenVocabulary,
     token_embedding: TokenEmbedding,
     attention_layers: Vec<AttentionLayer>,
 }
@@ -59,10 +58,14 @@ impl Parameterized for SmallLanguageModel {
 }
 
 impl SmallLanguageModel {
-    pub fn new(identifier: &str, configuration: SmallLanguageModelConfiguration) -> Self {
+    pub fn new(
+        identifier: &str,
+        configuration: SmallLanguageModelConfiguration,
+        token_vocabulary: TokenVocabulary,
+    ) -> Self {
         let token_embedding = TokenEmbedding::new(
             &format!("{}_token_embedding", identifier),
-            configuration.token_vocabulary.size(),
+            token_vocabulary.size(),
             configuration.embedding_dimensionality,
         );
         let mut attention_layers = Vec::new();
@@ -77,11 +80,13 @@ impl SmallLanguageModel {
         Self {
             identifier: identifier.to_owned(),
             configuration,
+            token_vocabulary,
             token_embedding,
             attention_layers,
         }
     }
 
+    #[allow(dead_code)]
     pub fn configuration(&self) -> &SmallLanguageModelConfiguration {
         &self.configuration
     }
@@ -133,11 +138,10 @@ pub fn sample_text(network: &SmallLanguageModel, prompt: Vec<f32>) -> String {
             .build(),
         );
         let logits = network.forward(input);
-        let next_token = sample_next_token(&network.configuration.token_vocabulary, logits);
+        let next_token = sample_next_token(&network.token_vocabulary, logits);
         text.push(next_token.clone());
         raw_context.push(
             *network
-                .configuration
                 .token_vocabulary
                 .token_to_id
                 .get(&next_token)
@@ -151,11 +155,9 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
     let mut optimizer =
         AdaptiveMomentEstimationOptimizer::new(network.parameters(), 0.0004, 0.9, 0.999, 1e-8);
 
-    let training_megastring = fs::read_to_string("training_data.txt").expect("file slurped");
-    let training_tokenstream = network
-        .configuration
-        .token_vocabulary
-        .token_id_ize(&training_megastring);
+    let training_megastring =
+        fs::read_to_string("training_data/training_data.txt").expect("file slurped");
+    let training_tokenstream = network.token_vocabulary.token_id_ize(&training_megastring);
 
     let start_time = time::Instant::now();
     let mut last_status_update = time::Instant::now();
@@ -190,7 +192,7 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
                 Array2::from_shape_fn(
                     (
                         network.configuration.context_window_size,
-                        network.configuration.token_vocabulary.size(),
+                        network.token_vocabulary.size(),
                     ),
                     |(i, j)| {
                         if target_vec[i] == j as f32 {
@@ -211,7 +213,18 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
         optimizer.step();
         optimizer.unset_gradients();
 
-        if last_status_update.elapsed() > time::Duration::from_secs(60 * 10) {
+        fn needs_status_update(
+            last_status_update: time::Instant,
+            optimizer: &dyn Optimizer,
+        ) -> bool {
+            if optimizer.step_count() < 500 {
+                last_status_update.elapsed() > time::Duration::from_secs(30)
+            } else {
+                last_status_update.elapsed() > time::Duration::from_secs(60 * 10)
+            }
+        }
+
+        if needs_status_update(last_status_update, &optimizer) {
             println!(
                 "{}: after {}s, {} steps, loss: {}",
                 chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
@@ -224,7 +237,7 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
         }
 
         if last_checkpoint.elapsed() > time::Duration::from_secs(60 * 30) {
-            serialize(&network, &format!("{}", optimizer.step_count()))
+            serialize(&network, &format!("{:010}", optimizer.step_count()))
                 .expect("network should write");
             last_checkpoint = time::Instant::now();
         }

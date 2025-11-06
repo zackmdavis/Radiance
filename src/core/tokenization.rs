@@ -1,6 +1,6 @@
-#![allow(dead_code)]
-
 use std::collections::{BTreeMap, HashMap};
+
+use log::{info, warn};
 
 pub const STANDARD_VOCABULARY: [char; 97] = [
     '▶', // start of sequence
@@ -71,7 +71,11 @@ impl TokenVocabulary {
         let tokens = self.tokenize(text);
         let mut ids = Vec::new();
         for token in tokens {
-            ids.push(*self.token_to_id.get(&token).expect("token ID should exist") as f32);
+            if let Some(token_id) = self.token_to_id.get(&token) {
+                ids.push(*token_id as f32);
+            } else {
+                warn!("ignoring unknown token {}", token);
+            }
         }
         ids
     }
@@ -100,6 +104,7 @@ impl TokenVocabulary {
                 .max_by_key(|(_bigram, &count)| count)
                 .unwrap();
             let mergetoken = merge.0.clone() + &merge.1;
+            info!("initializing vocabulary: learned token {:?}", mergetoken);
             merge_rules.push(merge.clone());
 
             let mut revised_training_tokens = Vec::new();
