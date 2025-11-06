@@ -2,15 +2,17 @@
 
 Radiance is an educational neural networks library and autodifferentiation framework!
 
-### TODO next
+### TODO before big training run
 
-### big
+#### craft
 
- * big training run!!
- * attention QKV biases
+ * tokenize
+ * curate training data
+ * SoftmaxCrossEntropy log–sum–exp trick
+ * BLAS
+ 
+#### delegate to Claude?
 
-#### small
-
- * address input _vs._ args inconsistent naming infelicity
+ * attention QKV biases (see bd1e3e6aa85 for context) 
  * ignored arguments in backward pass are sketchy
  * reduce Origin boilerplate (more complicated than it looks; `Self {}` is not a legal constructor)
