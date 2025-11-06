@@ -2,9 +2,75 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use super::embedding::{TokenVocabulary, STANDARD_VOCABULARY};
+pub const STANDARD_VOCABULARY: [char; 97] = [
+    '▶', // start of sequence
+    '\n', ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/', '0',
+    '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?', '@', 'A', 'B', 'C',
+    'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
+    'W', 'X', 'Y', 'Z', '[', '\\', ']', '^', '_', '`', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i',
+    'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '{', '|',
+    '}', '—',
+];
+
+#[derive(Debug)]
+pub struct TokenVocabulary {
+    pub token_to_id: HashMap<String, u16>,
+    pub id_to_token: HashMap<u16, String>,
+
+    pub(super) merge_rules: Vec<(String, String)>,
+}
 
 impl TokenVocabulary {
+    pub fn new(tokens: Vec<char>) -> Self {
+        let mut token_to_id = HashMap::new();
+        let mut id_to_token = HashMap::new();
+        for (i, token) in tokens.iter().enumerate() {
+            id_to_token.insert(i as u16, (*token).to_string());
+            token_to_id.insert((*token).to_string(), i as u16);
+        }
+        TokenVocabulary {
+            token_to_id,
+            id_to_token,
+            merge_rules: Vec::new(),
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        self.token_to_id.len() // without loss of generality
+    }
+
+    pub fn tokenize(&self, text: &str) -> Vec<f32> {
+        let mut tokens: Vec<String> = text.chars().map(|c| c.to_string()).collect();
+        for (_i, merge_rule) in self.merge_rules.iter().enumerate() {
+            let mut revised_tokens = Vec::new();
+            let mut skip_next = false;
+            for bigram in tokens.windows(2) {
+                if skip_next {
+                    skip_next = false;
+                    continue;
+                }
+                let [first, second] = bigram else {
+                    unreachable!();
+                };
+                if *first == merge_rule.0 && *second == merge_rule.1 {
+                    revised_tokens.push(first.to_owned() + second);
+                    skip_next = true;
+                } else {
+                    revised_tokens.push(first.to_owned());
+                }
+            }
+            if !skip_next {
+                revised_tokens.push(tokens.last().unwrap().to_owned());
+            }
+            tokens = revised_tokens;
+        }
+        let mut ids = Vec::new();
+        for token in tokens {
+            ids.push(*self.token_to_id.get(&token).expect("token ID should exist") as f32);
+        }
+        ids
+    }
+
     pub fn new_from_corpus(training_megastring: String, vocabulary_size: u16) -> Self {
         let mut training_tokens: Vec<String> =
             training_megastring.chars().map(|c| c.to_string()).collect();
@@ -78,6 +144,12 @@ impl TokenVocabulary {
             id_to_token,
             merge_rules,
         }
+    }
+}
+
+impl Default for TokenVocabulary {
+    fn default() -> Self {
+        Self::new(STANDARD_VOCABULARY.to_vec())
     }
 }
 

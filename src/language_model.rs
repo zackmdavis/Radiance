@@ -9,10 +9,11 @@ use rand::prelude::*;
 use rand_distr::weighted_alias::WeightedAliasIndex;
 
 use crate::core::attention::AttentionLayer;
-use crate::core::embedding::{sequence_positional_encoding, TokenEmbedding, TokenVocabulary};
+use crate::core::embedding::{sequence_positional_encoding, TokenEmbedding};
 use crate::core::operations::{softmax, Addition, Operation, SoftmaxCrossEntropy};
 use crate::core::optimization::{AdaptiveMomentEstimationOptimizer, Optimizer};
 use crate::core::serialization::serialize;
+use crate::core::tokenization::TokenVocabulary;
 use crate::core::{backprop, Parameterized, Tensor, TensorBuilder};
 
 pub struct SmallLanguageModelConfiguration {
