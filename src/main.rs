@@ -27,11 +27,18 @@ fn main() {
     }
 
     match args[1].as_str() {
-        "--train" => {
+        "--build-vocabulary" => {
             let token_training_megastring =
                 fs::read_to_string("training_data/token_training_data.txt").expect("file slurped");
             let token_vocabulary =
-                tokenization::TokenVocabulary::new_from_corpus(token_training_megastring, 200);
+                tokenization::TokenVocabulary::new_from_corpus(token_training_megastring, 1000);
+            token_vocabulary
+                .serialize("vocabulary.json")
+                .expect("vocabulary should serialize");
+        }
+        "--train" => {
+            let token_vocabulary = tokenization::TokenVocabulary::deserialize("vocabulary.json")
+                .expect("vocabulary should deserialize");
             let network = language_model::SmallLanguageModel::new(
                 "my_language_model",
                 language_model::SmallLanguageModelConfiguration::default(),

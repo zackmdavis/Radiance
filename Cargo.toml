@@ -18,6 +18,8 @@ ndarray-npy = { git = "https://github.com/zackmdavis/ndarray-npy", branch = "nda
 num-traits = "*"
 rand = "*"
 rand_distr = "0.4.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 topological-sort = "*"
 
 [profile.release]
