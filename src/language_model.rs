@@ -35,9 +35,9 @@ impl Default for SmallLanguageModelConfiguration {
 }
 
 pub struct SmallLanguageModel {
-    identifier: String,
-    configuration: SmallLanguageModelConfiguration,
-    token_vocabulary: TokenVocabulary,
+    pub identifier: String,
+    pub configuration: SmallLanguageModelConfiguration,
+    pub token_vocabulary: TokenVocabulary,
     token_embedding: TokenEmbedding,
     attention_layers: Vec<AttentionLayer>,
 }
