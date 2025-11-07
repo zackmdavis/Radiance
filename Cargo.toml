@@ -11,9 +11,12 @@ chrono = "*"
 env_logger = "*"
 lazy_static = "*"
 log = "*"
-ndarray = {version = "0.16", features = ["approx"]} 
+ndarray = {version = "0.16", features = ["approx", "blas"]}
 ndarray-rand = "0.15"
 ndarray-npy = "0.9.1"
+cblas-sys = "*"
+blas-src = { version = "*", features = ["openblas"] }
+openblas-src = { version = "*", features = ["cblas", "static"] }
 num-traits = "*"
 rand = "*"
 rand_distr = "0.4.3"
