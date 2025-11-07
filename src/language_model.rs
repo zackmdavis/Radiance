@@ -260,6 +260,7 @@ mod tests {
         let network = SmallLanguageModel::new(
             "my_language_model",
             SmallLanguageModelConfiguration::default(),
+            TokenVocabulary::default(),
         );
         let output = network.forward(Rc::new(
             TensorBuilder::new(array![0.0, 1.0].into_dyn()).build(),
