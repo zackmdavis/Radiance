@@ -101,7 +101,7 @@ impl TokenVocabulary {
             }
             let (merge, _count) = bigram_counter
                 .iter()
-                .max_by_key(|(_bigram, &count)| count)
+                .max_by_key(|&(ref _bigram, &count)| count)
                 .unwrap();
             let mergetoken = merge.0.clone() + &merge.1;
             info!("initializing vocabulary: learned token {:?}", mergetoken);
