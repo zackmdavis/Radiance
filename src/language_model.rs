@@ -1,10 +1,13 @@
-use std::fs;
+use std::fs::File;
+use std::io::Read;
 use std::rc::Rc;
 use std::time;
 
 use chrono;
 use ndarray::prelude::*;
 use rand::prelude::*;
+
+use log::info;
 
 use rand_distr::weighted_alias::WeightedAliasIndex;
 
@@ -155,96 +158,108 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
     let mut optimizer =
         AdaptiveMomentEstimationOptimizer::new(network.parameters(), 0.0004, 0.9, 0.999, 1e-8);
 
-    let training_megastring =
-        fs::read_to_string("training_data/training_data.txt").expect("file slurped");
-    let training_tokenstream = network.token_vocabulary.token_id_ize(&training_megastring);
-
     let start_time = time::Instant::now();
     let mut last_status_update = time::Instant::now();
     let mut last_checkpoint = time::Instant::now();
 
-    for context_window in training_tokenstream
-        .windows(network.configuration.context_window_size)
-        .step_by(network.configuration.context_window_size)
-    {
-        // We shift the input sequence by one (padding the beginning with a
-        // start-of-sequence token, so that each position can predict its own
-        // next token.
-        let mut input_vec = vec![0.0]; // start-of-sequence token
-        input_vec.extend(&context_window[..network.configuration.context_window_size - 1]);
-        let target_vec = context_window.to_vec();
+    // Stream file in chunks to avoid tokenizing entire corpus upfront
+    let mut file = File::open("training_data/training_data.txt").expect("file should open");
+    let chunk_size = 1024 * 1024; // 1MB
+    let mut buffer = vec![0u8; chunk_size];
 
-        // Input is a one-dimensional array of token IDs.
-        let input = Rc::new(
-            TensorBuilder::new(
-                Array1::from_shape_vec((network.configuration.context_window_size,), input_vec)
-                    .expect("array should build")
-                    .into_dyn(),
-            )
-            .build(),
-        );
+    loop {
+        let bytes_read = file.read(&mut buffer).expect("should read");
+        if bytes_read == 0 {
+            break; // EOF
+        }
 
-        let logits = network.forward(input);
+        let chunk = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+        info!("tokenizing data chunk");
+        let training_tokenstream = network.token_vocabulary.token_id_ize(&chunk);
 
-        // Targets, like, logits, is a (context_window, vocabulary_size) matrix.
-        let targets = Rc::new(
-            TensorBuilder::new(
-                Array2::from_shape_fn(
-                    (
-                        network.configuration.context_window_size,
-                        network.token_vocabulary.size(),
-                    ),
-                    |(i, j)| {
-                        if target_vec[i] == j as f32 {
-                            1.
-                        } else {
-                            0.
-                        }
-                    },
+        for context_window in training_tokenstream
+            .windows(network.configuration.context_window_size)
+            .step_by(network.configuration.context_window_size)
+        {
+            // We shift the input sequence by one (padding the beginning with a
+            // start-of-sequence token, so that each position can predict its own
+            // next token.
+            let mut input_vec = vec![0.0]; // start-of-sequence token
+            input_vec.extend(&context_window[..network.configuration.context_window_size - 1]);
+            let target_vec = context_window.to_vec();
+
+            // Input is a one-dimensional array of token IDs.
+            let input = Rc::new(
+                TensorBuilder::new(
+                    Array1::from_shape_vec((network.configuration.context_window_size,), input_vec)
+                        .expect("array should build")
+                        .into_dyn(),
                 )
-                .into_dyn(),
-            )
-            .build(),
-        );
-
-        let loss = SoftmaxCrossEntropy {}.forward(vec![logits, targets]);
-        let loss_value = loss.item();
-        backprop(loss);
-        optimizer.step();
-        optimizer.unset_gradients();
-
-        fn needs_status_update(
-            last_status_update: time::Instant,
-            optimizer: &dyn Optimizer,
-        ) -> bool {
-            if optimizer.step_count() < 500 {
-                last_status_update.elapsed() > time::Duration::from_secs(30)
-            } else {
-                last_status_update.elapsed() > time::Duration::from_secs(60 * 10)
-            }
-        }
-
-        if needs_status_update(last_status_update, &optimizer) {
-            println!(
-                "{}: after {}s, {} steps, loss: {}",
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                start_time.elapsed().as_secs(),
-                optimizer.step_count(),
-                loss_value
+                .build(),
             );
-            println!("sample: {:?}", sample_text(&network, vec![0.0]));
-            last_status_update = time::Instant::now();
-        }
 
-        if last_checkpoint.elapsed() > time::Duration::from_secs(60 * 30) {
-            serialize(&network, &format!("{:010}", optimizer.step_count()))
-                .expect("network should write");
-            last_checkpoint = time::Instant::now();
-        }
+            let logits = network.forward(input);
 
-        if let Some(step_limit) = max_steps {
-            if optimizer.step_count() > step_limit {
-                break;
+            // Targets, like, logits, is a (context_window, vocabulary_size) matrix.
+            let targets = Rc::new(
+                TensorBuilder::new(
+                    Array2::from_shape_fn(
+                        (
+                            network.configuration.context_window_size,
+                            network.token_vocabulary.size(),
+                        ),
+                        |(i, j)| {
+                            if target_vec[i] == j as f32 {
+                                1.
+                            } else {
+                                0.
+                            }
+                        },
+                    )
+                    .into_dyn(),
+                )
+                .build(),
+            );
+
+            let loss = SoftmaxCrossEntropy {}.forward(vec![logits, targets]);
+            let loss_value = loss.item();
+            backprop(loss);
+            optimizer.step();
+            optimizer.unset_gradients();
+
+            fn needs_status_update(
+                last_status_update: time::Instant,
+                optimizer: &dyn Optimizer,
+            ) -> bool {
+                if optimizer.step_count() < 500 {
+                    last_status_update.elapsed() > time::Duration::from_secs(30)
+                } else {
+                    last_status_update.elapsed() > time::Duration::from_secs(60 * 10)
+                }
+            }
+
+            if needs_status_update(last_status_update, &optimizer) {
+                println!(
+                    "{}: after {}s, {} steps, loss: {}",
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                    start_time.elapsed().as_secs(),
+                    optimizer.step_count(),
+                    loss_value
+                );
+                println!("sample: {:?}", sample_text(&network, vec![0.0]));
+                last_status_update = time::Instant::now();
+            }
+
+            if last_checkpoint.elapsed() > time::Duration::from_secs(60 * 30) {
+                serialize(&network, &format!("{:010}", optimizer.step_count()))
+                    .expect("network should write");
+                last_checkpoint = time::Instant::now();
+            }
+
+            if let Some(step_limit) = max_steps {
+                if optimizer.step_count() > step_limit {
+                    return network;
+                }
             }
         }
     }
