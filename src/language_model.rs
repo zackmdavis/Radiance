@@ -160,9 +160,11 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
 
     let start_time = time::Instant::now();
     let mut last_status_update = time::Instant::now();
-    let mut last_checkpoint = time::Instant::now();
+    let mut steps_at_last_update = 0;
     let mut accumulated_loss = 0.0;
     let mut accumulated_positions = 0;
+
+    let mut last_checkpoint = time::Instant::now();
 
     for _epoch in 0..6 {
         // Stream file in chunks to avoid tokenizing entire corpus upfront
@@ -245,15 +247,21 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
                 }
 
                 if needs_status_update(last_status_update, &optimizer) {
+                    let elapsed_since_last = last_status_update.elapsed().as_secs_f32();
+                    let steps_since_last = optimizer.step_count() - steps_at_last_update;
+                    let steps_per_sec = steps_since_last as f32 / elapsed_since_last;
+
                     println!(
-                        "{}: after {}s, {} steps, avg. loss: {}",
+                        "{}: after {}s, {} steps ({:.2} steps/sec), avg. loss: {}",
                         chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
                         start_time.elapsed().as_secs(),
                         optimizer.step_count(),
+                        steps_per_sec,
                         accumulated_loss / (accumulated_positions as f32)
                     );
                     println!("sample: {:?}", sample_text(&network, vec![0.0]));
                     last_status_update = time::Instant::now();
+                    steps_at_last_update = optimizer.step_count();
                     accumulated_loss = 0.0;
                     accumulated_positions = 0;
                 }
