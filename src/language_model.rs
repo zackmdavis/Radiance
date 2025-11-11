@@ -160,6 +160,7 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
 
     let start_time = time::Instant::now();
     let mut last_status_update = time::Instant::now();
+    let mut last_sample = time::Instant::now();
     let mut steps_at_last_update = 0;
     let mut accumulated_loss = 0.0;
     let mut accumulated_positions = 0;
@@ -259,7 +260,12 @@ pub fn train_slm(network: SmallLanguageModel, max_steps: Option<usize>) -> Small
                         steps_per_sec,
                         accumulated_loss / (accumulated_positions as f32)
                     );
-                    println!("sample: {:?}", sample_text(&network, vec![0.0]));
+
+                    if last_sample.elapsed() > time::Duration::from_secs(60 * 90) {
+                        println!("sample: {:?}", sample_text(&network, vec![0.0]));
+                        last_sample = time::Instant::now();
+                    }
+
                     last_status_update = time::Instant::now();
                     steps_at_last_update = optimizer.step_count();
                     accumulated_loss = 0.0;

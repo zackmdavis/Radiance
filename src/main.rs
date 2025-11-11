@@ -52,10 +52,6 @@ fn main() {
                 .expect("vocabulary should serialize");
         }
         "--train" => {
-            println!(
-                "sample at initialization: {}",
-                language_model::sample_text(&network, vec![0.0])
-            );
             language_model::train_slm(
                 network,
                 args.get(2).map(|n| n.parse().expect("arg should be int")),
