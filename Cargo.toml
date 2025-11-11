@@ -1,3 +1,7 @@
+[features]
+default = []
+blas = ["ndarray/blas"]
+
 [package]
 name = "radiance"
 version = "0.0.3"
